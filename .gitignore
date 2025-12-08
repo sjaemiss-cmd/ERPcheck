@@ -1,0 +1,45 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Environment files
+.env
+
+# Session files
+*_session.json
+kakao_session.json
+naver_session.json
+
+# Debug files
+debug.log
+debug_*.png
+*.html
+
+# Executables
+*.exe
+*.spec
+
+# Other
+.DS_Store
+Thumbs.db

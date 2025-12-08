@@ -1,0 +1,61 @@
+{
+    "program_info": {
+        "name": "통합 예약 자동화 시스템 (Unified Reservation Automation System)",
+        "description": "카카오톡, 네이버 예약 등 다양한 경로로 들어오는 예약 요청을 수집하고, ERP 시스템의 일정과 대조하여 자동으로 등록하는 통합 관리 솔루션입니다.",
+        "version": "2.0.0 (Planned)",
+        "tech_stack": [
+            "Python 3.13",
+            "PyQt6 (GUI - Tab Interface)",
+            "Playwright (Web Automation - Multi-site)",
+            "Cookie/Session Management"
+        ]
+    },
+    "target_sites": {
+        "kakao": {
+            "url": "https://business.kakao.com/_hxlxnIs/chats",
+            "role": "Source (예약 요청 수집)",
+            "method": "Playwright Scraping (Cookie Session)"
+        },
+        "naver": {
+            "url": "https://partner.booking.naver.com/bizes/697059/booking-list-view",
+            "role": "Source (예약 요청 수집)",
+            "method": "Playwright Scraping (Cookie Session)"
+        },
+        "erp": {
+            "url": "https://sook0517.cafe24.com/index/calender?mdibx=213414",
+            "role": "Target (일정 관리 및 등록)",
+            "method": "Playwright Automation (Read/Write)"
+        }
+    },
+    "features": {
+        "core_functionality": {
+            "unified_collection": "카카오 비즈니스 센터와 네이버 예약 파트너센터의 신규 예약 요청을 주기적으로 수집합니다.",
+            "smart_matching": "수집된 예약 희망 시간과 ERP 캘린더의 빈 시간을 자동으로 대조하여 예약 가능 여부를 판단합니다.",
+            "auto_registration": "검증된 예약을 ERP 시스템에 자동으로 등록(일정 추가 -> 정보 입력 -> 저장)합니다.",
+            "missing_memo_check": "기존 기능: 당일 교육 일지 누락 여부를 확인하고 일괄 작성/전송합니다."
+        },
+        "gui_features": {
+            "tab_interface": "기능별 탭(예약 수집, 누락 확인, 설정)으로 구분된 직관적인 인터페이스를 제공합니다.",
+            "dashboard": "수집된 예약 요청 목록과 처리 상태(대기, 등록 완료, 실패)를 한눈에 보여줍니다.",
+            "manual_override": "자동 등록 전 사용자가 내용을 검토하고 수정하거나 승인/거절할 수 있는 기능을 제공합니다."
+        }
+    },
+    "roadmap": {
+        "phase_1_gui_foundation": {
+            "status": "In Progress",
+            "description": "PyQt6 QTabWidget을 도입하여 확장 가능한 UI 구조로 개편합니다."
+        },
+        "phase_2_source_connectors": {
+            "status": "Planned",
+            "description": "카카오 및 네이버 파트너센터에 대한 로그인 세션 유지(쿠키) 및 데이터 수집 모듈을 구현합니다."
+        },
+        "phase_3_erp_write_logic": {
+            "status": "Planned",
+            "description": "ERP 캘린더에서 '일정 추가' 버튼 클릭부터 저장까지의 등록 프로세스를 자동화합니다."
+        },
+        "phase_4_integration_testing": {
+            "status": "Planned",
+            "description": "수집 -> 대조 -> 등록으로 이어지는 전체 파이프라인을 통합하고 안정성을 검증합니다."
+        }
+    }
+}
