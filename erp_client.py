@@ -59,20 +59,47 @@ class ERPClient:
         print("Navigating to login page...")
         self.page.goto("https://sook0517.cafe24.com/")
         
+        # Handle potential alerts (e.g. "Invalid ID/PW")
+        self.page.on("dialog", lambda dialog: (logging.info(f"Dialog: {dialog.message}"), print(f"Dialog: {dialog.message}"), dialog.accept()))
+        
         logging.info("Logging in...")
         print("Logging in...")
         self.page.fill("input[name='id']", self.erp_id)
         self.page.fill("input[name='pwd']", self.erp_password)
-        self.page.click("button[type='submit']")
+        
+        # Try submitting via Enter first
+        self.page.press("input[name='pwd']", "Enter")
+        
+        # Also click just in case
+        try:
+             self.page.click("button[type='submit']", timeout=1000)
+        except:
+             pass
         
         try:
-            self.page.wait_for_url("**/index/main", timeout=5000)
-            logging.info("Login successful.")
+            # Wait for either main page OR a known element on the dashboard
+            self.page.wait_for_url("**/index/main", timeout=10000)
+            logging.info(f"Login successful. URL: {self.page.url}")
             print("Login successful.")
             return True
         except:
-            print("Login check timeout, assuming success or manual check needed.")
-            return True
+            # Check if we are still on login page
+            if "login" in self.page.url or "cafe24.com/" == self.page.url:
+                 logging.error(f"Login failed. Still on {self.page.url}")
+                 print(f"Login failed. Still on {self.page.url}")
+                 return False
+            
+            # Fallback: Check for a logged-in element (e.g. user info, logout button)
+            try:
+                if self.page.locator(".logout").count() > 0 or self.page.locator("a[href*='logout']").count() > 0:
+                     logging.info("Login successful (found logout button).")
+                     return True
+            except:
+                pass
+
+            logging.warning(f"Login check timed out. URL: {self.page.url}. Assuming failure.")
+            print(f"Login check timed out. URL: {self.page.url}")
+            return False
 
     def get_today_events_data(self):
         """
@@ -120,7 +147,7 @@ class ERPClient:
 
     def get_events_for_date(self, target_date):
         """
-        Retrieves events for a specific date.
+        Retrieves events for a specific date using the direct API.
         target_date: datetime.date object or string 'YYYY-MM-DD'
         """
         if isinstance(target_date, datetime.date):
@@ -129,58 +156,77 @@ class ERPClient:
             target_date_str = target_date
             
         try:
-            # Ensure we are on the calendar page
-            if not self.page.url.endswith("/index/calender"):
-                logging.info("Navigating to calendar page for availability check...")
-                self.page.goto("https://sook0517.cafe24.com/index/calender")
-                self.page.wait_for_load_state("networkidle")
+            # Ensure logged in first (if URL is not safe, or just trust session)
+            # We assume check_availability ensures login, but let's be safe.
+            if "login" in self.page.url:
+                logging.warning("Not logged in during event fetch. Re-logging...")
+                if not self.login():
+                    return None
+
+            # API Endpoint found via debugging: /index.php/dataFunction/getEvent?idx=4
+            api_url = "https://sook0517.cafe24.com/index.php/dataFunction/getEvent?idx=4"
+            
+            # FullCalendar typically sends start/end as YYYY-MM-DD or timestamp.
+            # We'll stick to a 2-day window to be safe.
+            start_dt = datetime.datetime.strptime(target_date_str, "%Y-%m-%d")
+            end_dt = start_dt + datetime.timedelta(days=1)
+            
+            payload = {
+                'start': start_dt.strftime("%Y-%m-%d"),
+                'end': end_dt.strftime("%Y-%m-%d")
+            }
+            
+            logging.info(f"Fetching API events from {api_url} with payload {payload}")
+            
+            # Using page.request to share session cookies
+            response = self.page.request.post(api_url, form=payload)
+            
+            if not response.ok:
+                logging.error(f"API Request failed: {response.status} {response.status_text}")
+                return None
                 
-                # Dump HTML for inspection
-                try:
-                    with open("calendar_dump.html", "w", encoding="utf-8") as f:
-                        f.write(self.page.content())
-                    logging.info("Saved calendar_dump.html")
-                except Exception as e:
-                    logging.error(f"Failed to save dump: {e}")
+            data = response.json()
+            # logging.info(f"API Response data sample: {str(data)[:200]}")
             
-            # Navigate to date
-            self.page.evaluate(f"$('#calendar').fullCalendar('gotoDate', '{target_date_str}')")
-            time.sleep(1) # Wait for render
-            
-            data = self.page.evaluate("""() => {
-                var cal = $('#calendar'); 
-                if (cal.length === 0) cal = $('.fc').parent(); 
-                
-                if (cal.length > 0 && cal.fullCalendar) {
-                    var events = cal.fullCalendar('clientEvents');
-                    return events.map(e => ({
-                        title: e.title,
-                        start: e.start ? e.start.format() : null,
-                        end: e.end ? e.end.format() : null,
-                        resourceId: e.resourceId || 'NoResource'
-                    }));
-                }
-                return [];
-            }""")
-            
+            # Process data (Schema observed: {'title':..., 'start':..., 'end':..., 'resourceId':...})
             events_on_date = []
             for e in data:
-                if e['start'] and e['start'].startswith(target_date_str):
+                # Filter locally just in case API returns more
+                if e.get('start') and e['start'].startswith(target_date_str):
                     try:
-                        start_dt = datetime.datetime.fromisoformat(e['start'])
-                        end_dt = datetime.datetime.fromisoformat(e['end']) if e['end'] else start_dt
+                        # start format often "YYYY-MM-DD HH:mm:ss" api-side
+                        dt_format = "%Y-%m-%d %H:%M:%S" 
+                        # Determine format by length or trial
+                        if "T" in e['start']: # ISO
+                             s_dt = datetime.datetime.fromisoformat(e['start'])
+                        else:
+                             s_dt = datetime.datetime.strptime(e['start'], dt_format)
+                        
+                        if e.get('end'):
+                             if "T" in e['end']:
+                                 e_dt = datetime.datetime.fromisoformat(e['end'])
+                             else:
+                                 e_dt = datetime.datetime.strptime(e['end'], dt_format)
+                        else:
+                             e_dt = s_dt
+                             
                         events_on_date.append({
-                            'title': e['title'],
-                            'start': start_dt,
-                            'end': end_dt,
-                            'resourceId': e.get('resourceId')
+                            'title': e.get('title', 'No Title'),
+                            'start': s_dt,
+                            'end': e_dt,
+                            'resourceId': e.get('resourceId') or e.get('resourceid') # Case safety
                         })
-                    except:
-                        pass
+                    except Exception as parse_err:
+                        logging.warning(f"Date parse error for {e}: {parse_err}")
+                        
+            logging.info(f"Parsed {len(events_on_date)} events for {target_date_str}")
             return events_on_date
+
         except Exception as e:
-            logging.error(f"Error getting events for date {target_date_str}: {e}")
-            return []
+            logging.error(f"Error getting events via API for {target_date_str}: {e}")
+            import traceback
+            logging.error(traceback.format_exc())
+            return None
 
     def check_availability(self, date_str, start_time_str, end_time_str, name, product, request):
         """
@@ -192,6 +238,8 @@ class ERPClient:
             target_end = datetime.datetime.strptime(f"{date_str} {end_time_str}", "%Y-%m-%d %H:%M")
             
             events = self.get_events_for_date(date_str)
+            if events is None:
+                return False, "데이터 조회 실패 (오류 발생)", None
             
             # 1. Duplicate Check
             for e in events:
@@ -201,18 +249,21 @@ class ERPClient:
 
             # 2. Determine Target Seats
             # Rules:
-            # - Consultation (상담) -> Seat 9 (dobong-9)
-            # - New/Review (신규/리뷰노트) -> Seats 4, 5 (dobong-4, dobong-5)
-            # - Existing (기존 - default) -> Seats 1, 2, 3 (dobong-1, dobong-2, dobong-3)
+            # - dobong-4, dobong-7, dobong-8 are RESERVED/EXCLUDED - Exclude from ALL auto-assign.
+            # - Priority 1: Review/Experience (리뷰노트/체험권) -> Seats 1, 2, 3, 5, 6
+            #   (Precedence: 'Review Note' request overrides 'Consultation' product type)
+            # - Priority 2: Standard Consultation (상담) without Review Note -> Seat 9 (dobong-9)
+            # - Default -> Seats 1, 2, 3, 5, 6 (Explicitly excluding 4, 7, 8)
             
             target_seats = []
-            if "상담" in product or "상담" in request:
+            if "리뷰노트" in request or "체험권" in product: 
+                 # Explicitly excluding 4, 7, 8
+                 target_seats = ['dobong-1', 'dobong-2', 'dobong-3', 'dobong-5', 'dobong-6']
+            elif "상담" in product or "상담" in request:
                  target_seats = ['dobong-9']
-            elif "리뷰노트" in request or "체험권" in product: # Assuming New/Review
-                 target_seats = ['dobong-4', 'dobong-5']
             else:
-                 # Default to existing seats
-                 target_seats = ['dobong-1', 'dobong-2', 'dobong-3']
+                 # Default to existing seats (Explicitly excluding 4, 7, 8)
+                 target_seats = ['dobong-1', 'dobong-2', 'dobong-3', 'dobong-5', 'dobong-6']
             
             logging.info(f"Target seats for {name} ({product}): {target_seats}")
 
@@ -225,17 +276,24 @@ class ERPClient:
                 is_seat_free = True
                 for e in events:
                     # Check if event is on this seat
-                    # resourceId might be 'dobong-1' or just '1'. Let's handle both if possible, 
-                    # but user said 'dobong-9'.
-                    r_id = e.get('resourceId', '')
+                    # resourceId might be 'dobong-1' or just '1'. Handle both.
+                    r_id = str(e.get('resourceId', ''))
                     
-                    # Normalize comparison (handle if ERP uses '1' instead of 'dobong-1')
-                    # But let's assume 'dobong-X' for now based on user input.
-                    if r_id != seat:
+                    # Log encountered resource IDs for debugging
+                    logging.info(f"Checking event '{e['title']}' on resource: {r_id} (sched: {e['start']}~{e['end']}) vs Target: {seat} ({target_start}~{target_end})")
+
+                    # Normalize comparison: Check if '1' matches 'dobong-1' or 'dobong-1' matches 'dobong-1'
+                    seat_suffix = seat.split('-')[-1] if '-' in seat else seat
+                    r_id_suffix = r_id.split('-')[-1] if '-' in r_id else r_id
+                    
+                    if r_id_suffix != seat_suffix:
+                        # logging.debug(f"Seat mismatch: {r_id_suffix} != {seat_suffix}")
                         continue
                         
                     # Check overlap
+                    # target_start < e['end'] and target_end > e['start']
                     if e['start'] < target_end and e['end'] > target_start:
+                        logging.warning(f"Overlap detected on {seat}: Event {e['start']}~{e['end']} overlaps with Target {target_start}~{target_end}")
                         is_seat_free = False
                         break
                 
@@ -268,11 +326,12 @@ class ERPClient:
             logging.info(f"Creating reservation for {name} ({product}) on {seat_id}")
 
             # Fallback: Determine seat_id if not provided
+            # Fallback: Determine seat_id if not provided
             if not seat_id:
-                if "상담" in product or "상담" in request:
+                if "상담" in product and "리뷰노트" not in request: # Strict check for pure consultation
                      seat_id = 'dobong-9'
                 elif "리뷰노트" in request or "체험권" in product:
-                     seat_id = 'dobong-4' # Default to 4 for new/review
+                     seat_id = 'dobong-1' # Default to 1 (Valid: 1,2,3,5,6)
                 else:
                      seat_id = 'dobong-1' # Default to 1 for existing
                 logging.info(f"Seat ID not provided. Defaulting to {seat_id} based on product.")
@@ -305,21 +364,57 @@ class ERPClient:
             self.page.wait_for_selector(modal_selector, state="visible", timeout=3000)
 
             # --- Fill Date & Time ---
+            
+            # Normalize date_str to ensure YYYY-MM-DD
+            # This handles cases where gui might pass other formats or split might get wrong year
+            try:
+                # Try parsing as ISO first
+                if '-' in date_str:
+                    parts = date_str.split('-')
+                    if len(parts[0]) == 4: # Already YYYY-MM-DD
+                        pass
+                    elif len(parts[2]) == 4: # MM-DD-YYYY or DD-MM-YYYY -> Assume MM-DD-YYYY default or try to guess?
+                        # Let's handle MM-DD-YYYY
+                        date_str = f"{parts[2]}-{int(parts[0]):02d}-{int(parts[1]):02d}"
+                elif '/' in date_str:
+                    parts = date_str.split('/')
+                    if len(parts[0]) == 4:
+                        date_str = f"{parts[0]}-{int(parts[1]):02d}-{int(parts[2]):02d}"
+                    else:
+                        date_str = f"{parts[2]}-{int(parts[0]):02d}-{int(parts[1]):02d}"
+            except Exception as e:
+                logging.error(f"Date normalization error: {e}")
+
             # Date - Set the input value directly in YYYY-MM-DD format
             # Then trigger datepicker update
             logging.info(f"Setting date to {date_str}")
             
             # Split date for explicit Date object creation
-            year, month, day = date_str.split('-')
+            try:
+                year, month, day = date_str.split('-')
+            except ValueError:
+                logging.error(f"Invalid date format after normalization: {date_str}")
+                return False
             
             # Set input value directly first
             self.page.evaluate(f"$('#insDate').val('{date_str}');")
             
-            # Then update datepicker with explicit Date object (month is 0-indexed in JS)
-            self.page.evaluate(f"$('#insDate').datepicker('setDate', new Date({year}, {int(month)-1}, {int(day)}));")
-            
-            # Trigger change event
-            self.page.evaluate(f"$('#insDate').trigger('change');")
+            # Use strict value setting bypassing setDate to avoid re-formatting to MM/DD/YYYY
+            # We trigger change manually. 
+            self.page.evaluate(f"""() => {{
+                // Try to destroy datepicker to prevent interference if possible, 
+                // but wrap in try-catch in case it doesn't exist or fails.
+                try {{ $('#insDate').datepicker('destroy'); }} catch(e) {{}}
+                
+                // Set value again to be sure
+                $('#insDate').val('{date_str}');
+                
+                // Trigger events
+                $('#insDate').trigger('change');
+                
+                // Also native event
+                document.getElementById('insDate').dispatchEvent(new Event('change', {{ bubbles: true }}));
+            }}""")
             
             # Wait for AJAX to populate device list
             time.sleep(0.5)
@@ -336,14 +431,9 @@ class ERPClient:
             
             # Wait for Device list to update
             # The device list is populated via AJAX after date/time change.
-            # Wait until the select has options other than the default placeholder.
-            try:
-                self.page.wait_for_function(
-                    f"document.querySelector('{modal_selector} select[name=\"machine_info_idx\"]').options.length > 1",
-                    timeout=5000
-                )
-            except:
-                logging.warning("Device list did not populate within timeout.")
+            # We don't block here anymore because we have a robust retry loop at the end.
+            time.sleep(0.2)
+
 
             # --- Fill Form ---
             
@@ -353,113 +443,15 @@ class ERPClient:
             except:
                 pass
 
-            # 1. Device (Seat)
-            if seat_id:
-                try:
-                    # Target the specific select in the NEW modal
-                    device_select_selector = f"{modal_selector} select#insMachine"
-                    
-                    # Retry loop for device selection
-                    max_retries = 3
-                    selection_success = False
-                    
-                    for attempt in range(max_retries):
-                        logging.info(f"Device selection attempt {attempt+1}/{max_retries}")
-                        
-                        # Wait for options using jQuery check
-                        try:
-                            self.page.wait_for_function(
-                                f"$('#CalenderModalNew select#insMachine option[value!=\"\"]').length > 0",
-                                timeout=5000
-                            )
-                        except:
-                            logging.warning("Timeout waiting for device options.")
-                            time.sleep(0.5)
-                            continue
-
-                        # Small stabilization delay after AJAX
-                        time.sleep(0.3)
-
-                        # Fetch options using jQuery
-                        options_data = self.page.evaluate("""() => {
-                            var opts = [];
-                            $('#CalenderModalNew select#insMachine option').each(function() {
-                                opts.push({ text: $(this).text(), value: $(this).val() });
-                            });
-                            return opts;
-                        }""")
-                        logging.info(f"Available device options: {options_data}")
-                        
-                        target_value = None
-                        # Matching logic (Exact -> Number -> Text)
-                        for opt in options_data:
-                            if opt['value'] == seat_id:
-                                target_value = seat_id
-                                break
-                        if not target_value and '-' in seat_id:
-                            seat_num = seat_id.split('-')[-1]
-                            for opt in options_data:
-                                if opt['value'] == seat_num or seat_num in opt['text']:
-                                    target_value = opt['value']
-                                    break
-                        if not target_value:
-                             for opt in options_data:
-                                if seat_id in opt['text']:
-                                    target_value = opt['value']
-                                    break
-                        if not target_value and len(options_data) >= 2:
-                             target_value = options_data[1]['value'] # First non-default option
-
-                        if target_value:
-                            logging.info(f"Selecting device: {target_value}")
-                            
-                            # Use jQuery to set value and trigger events
-                            result = self.page.evaluate(f"""() => {{
-                                try {{
-                                    var sel = $('#CalenderModalNew select#insMachine');
-                                    if (sel.length === 0) return {{ success: false, error: 'Selector not found' }};
-                                    
-                                    // Set value using jQuery
-                                    sel.val('{target_value}');
-                                    
-                                    // Trigger all relevant jQuery events
-                                    sel.trigger('focus');
-                                    sel.trigger('change');
-                                    sel.trigger('blur');
-                                    
-                                    // Verify
-                                    var actualValue = sel.val();
-                                    return {{ success: actualValue === '{target_value}', actualValue: actualValue }};
-                                }} catch(e) {{
-                                    return {{ success: false, error: e.toString() }};
-                                }}
-                            }}""")
-                            
-                            logging.info(f"Selection result: {result}")
-                            
-                            if result.get('success'):
-                                selection_success = True
-                                break
-                        
-                        time.sleep(1) # Wait before retry
-                    
-                    if not selection_success:
-                        logging.error(f"Failed to select device {seat_id} after retries.")
-                        self.page.screenshot(path="debug_device_failure.png")
-                        
-                except Exception as e:
-                    logging.warning(f"Error selecting seat {seat_id}: {e}")
-                    self.page.screenshot(path="debug_device_error.png")
-
-            # 2. Member Type & Name
+            # NOTE: Device selection is deferred to just before submission to prevent AJAX resets
 
             # 2. Member Type & Name
             # Default to 'Direct Join' (Value 'J', Class 'type_member_b') for automation
             # This allows entering name/phone directly without needing an existing member ID.
             try:
-                self.page.click(f"{modal_selector} input.type_member_b")
+                self.page.click(f"{modal_selector} input.type_member_b", timeout=2000)
             except:
-                logging.warning("Could not select 'Direct Join' radio button")
+                logging.warning("Could not select 'Direct Join' radio button (proceeding)")
 
             # Fill Name
             self.page.fill(f"{modal_selector} #member_ins_name", name)
@@ -469,34 +461,150 @@ class ERPClient:
                 self.page.fill(f"{modal_selector} #insPhone", phone)
                 
             # Fill Birthdate (Required field)
-            # Default to 2000-01-01 if not provided (User can correct later)
             try:
-                self.page.select_option(f"{modal_selector} .birth_year", value="2000")
-                self.page.select_option(f"{modal_selector} .birth_month", value="01")
-                self.page.select_option(f"{modal_selector} .birth_day", value="01")
+                self.page.select_option(f"{modal_selector} .birth_year", value="2000", timeout=2000)
+                self.page.select_option(f"{modal_selector} .birth_month", value="01", timeout=2000)
+                self.page.select_option(f"{modal_selector} .birth_day", value="01", timeout=2000)
             except:
                 logging.warning("Could not select birthdate")
 
-            # 3. Product Selection
-            # If "상담" (Consultation), check "No Product"
-            if "상담" in product or "상담" in request:
-                try:
-                    self.page.click(f"{modal_selector} input.nullGoods") 
-                except:
-                    pass
-            else:
-                # For other products, we might need to select something.
-                # For now, leave as is or select a default if required.
-                pass
+
+            # 3. Product Selection (Refactored)
+            if "2종 시간제" in product or "1시간" in product or "체험권" in product:
+                target_value = "6236"
+                target_selector = f'{modal_selector} select[name="goods_idx"]'
                 
+                try:
+                    logging.info(f"Selecting product {target_value}...")
+                    
+                    # 1. Wait for element
+                    self.page.wait_for_selector(target_selector, state="attached", timeout=3000)
+                    
+                    # 2. Select Option
+                    self.page.select_option(target_selector, value=target_value, force=True)
+                    
+                    # 3. Dispatch Events (Defensive)
+                    self.page.evaluate(f"""() => {{
+                        const el = document.querySelector('{target_selector}');
+                        if (el) {{
+                            el.value = '{target_value}';
+                            el.dispatchEvent(new Event('change', {{ bubbles: true }}));
+                            el.dispatchEvent(new Event('input', {{ bubbles: true }}));
+                        }}
+                    }}""")
+                    logging.info("Product selection applied.")
+                    
+                except Exception as e:
+                    logging.warning(f"Failed to select product: {e}")
+            
+            elif "상담" in product:
+                 try:
+                    self.page.click(f"{modal_selector} input.nullGoods", timeout=1000)
+                 except: pass
             # 4. Payment
             # Default to 'Naver Pay' (Value '12') if likely from Naver
             try:
-                self.page.select_option(f"{modal_selector} .payment_select", value="12")
+                self.page.select_option(f"{modal_selector} .payment_select", value="12", timeout=2000)
             except:
                 pass
+            logging.info(f"Setting device {seat_id} (Verify and Retry mode)...")
             
-            # 5. Submit
+            # Retry loop
+            for attempt in range(5):
+                # 1. Inspect current options
+                options_info = self.page.evaluate(f"""() => {{
+                    var sel = $('#CalenderModalNew select#insMachine');
+                    if (sel.length === 0) sel = $('#CalenderModalNew select[name="machine_info_idx"]');
+                    if (sel.length === 0) sel = $('#CalenderModalNew select').first();
+                    
+                    var opts = [];
+                    sel.find('option').each(function() {{
+                        opts.push({{ text: $(this).text(), value: $(this).val() }});
+                    }});
+                    return {{ opts: opts, val: sel.val(), id: sel.attr('id') }};
+                }}""")
+                
+                logging.info(f"Attempt {attempt+1}: Current value: {options_info['val']}, Options count: {len(options_info['opts'])}")
+                
+                # Find target value
+                target_value = None
+                target_text = None
+                
+                # Text match
+                for opt in options_info['opts']:
+                    if opt['text'] == seat_id:
+                        target_value = opt['value']
+                        target_text = opt['text']
+                        break
+                # Partial text match
+                if not target_value:
+                    for opt in options_info['opts']:
+                        if seat_id in opt['text']:
+                            target_value = opt['value']
+                            target_text = opt['text']
+                            break
+                # Number match
+                if not target_value and '-' in seat_id:
+                    seat_num = seat_id.split('-')[-1]
+                    for opt in options_info['opts']:
+                        if opt['text'].endswith('-' + seat_num):
+                            target_value = opt['value']
+                            target_text = opt['text']
+                            break
+                            
+                if not target_value:
+                    # If no options yet (AJAX still loading), wait a bit
+                    if len(options_info['opts']) <= 1:
+                        logging.info("Waiting for options to load...")
+                        time.sleep(0.5)
+                        continue
+                    
+                    logging.warning(f"Could not find option for {seat_id}. Waiting...")
+                    time.sleep(0.5)
+                    continue
+                    
+                # 2. Select the value
+                if str(options_info['val']) != str(target_value):
+                    logging.info(f"Applying selection: {target_text} ({target_value})")
+                    
+                    # Try Playwright native select first (more robust events)
+                    try:
+                        if options_info['id']:
+                            self.page.select_option(f"#{options_info['id']}", value=str(target_value), timeout=2000)
+                        else:
+                            # Fallback to JS
+                            self.page.evaluate(f"""() => {{
+                                var sel = $('#CalenderModalNew select#insMachine');
+                                if (sel.length === 0) sel = $('#CalenderModalNew select[name="machine_info_idx"]');
+                                sel.val('{target_value}').trigger('change');
+                            }}""")
+                    except Exception as e:
+                        logging.warning(f"Native select failed: {e}, using JS fallback")
+                        self.page.evaluate(f"""() => {{
+                            var sel = $('#CalenderModalNew select#insMachine');
+                            if (sel.length === 0) sel = $('#CalenderModalNew select[name="machine_info_idx"]');
+                            sel.val('{target_value}').trigger('change');
+                        }}""")
+                
+                # 3. Wait and Verify
+                time.sleep(0.5)
+                
+                current_val = self.page.evaluate("""() => {
+                     var sel = $('#CalenderModalNew select#insMachine');
+                     if (sel.length === 0) sel = $('#CalenderModalNew select[name="machine_info_idx"]');
+                     return sel.val();
+                }""")
+                
+                if str(current_val) == str(target_value):
+                    logging.info("Selection verified and persisted!")
+                    break
+                else:
+                    logging.warning(f"Selection lost (Current: {current_val}). Retrying...")
+                
+
+            
+            # 6. Submit
+            logging.info("Submitting form...")
             self.page.click(f"{modal_selector} button.antosubmit")
             
             # Wait for modal to close

@@ -134,14 +134,18 @@ class NaverClient:
                         duration_min = 30 # Default
                         
                         # Logic:
-                        # 1. If '리뷰노트' in request_text -> 60 mins (Priority)
-                        # 2. Else if '1시간' or '체험권' in product_text -> 60 mins
+                        # 1. '2종 시간제' or '1시간' or '체험권' -> 60 mins
+                        # 2. '리뷰노트' in request -> 60 mins
+                        # 3. '합격무제한' -> Unlimited (Keep default or set to specific if needed, currently 30 or 60?). 
+                        #    User said only this is unlimited. Let's default to 60 for now to be safe, or 30.
+                        #    Let's stick to the explicit 60 rules first.
                         
-                        if "리뷰노트" in request_text:
+                        if "2종 시간제" in product_text or "1시간" in product_text or "체험권" in product_text:
+                            duration_min = 60
+                            logging.info(f"Row '{name_text}': Duration set to 60min due to Product keywords.")
+                        elif "리뷰노트" in request_text:
                             duration_min = 60
                             logging.info(f"Row '{name_text}': Duration set to 60min due to '리뷰노트' in request.")
-                        elif "1시간" in product_text or "체험권" in product_text:
-                            duration_min = 60
                         
                         # Parse Date/Time for structured data
                         # We'll do a best-effort parse here to help the GUI

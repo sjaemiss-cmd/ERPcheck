@@ -458,8 +458,77 @@ class NaverWorker(QObject):
             result = self.client.login()
             self.login_finished.emit(result)
         elif self.mode == "collect":
-            data = self.client.get_reservations()
-            self.finished.emit(data)
+            # --- DUMMY MODE START (REALISTIC STRUCTURE) ---
+            print("Running in TEST MODE: Generating realistic dummy reservations...")
+            import random
+            
+            dummy_data = []
+            
+            # Date range: 2025-12-20 to 2025-12-23
+            base_date = datetime.date(2025, 12, 20)
+            weekday_map = {0: '월', 1: '화', 2: '수', 3: '목', 4: '금', 5: '토', 6: '일'}
+            
+            test_cases = [
+                ("1시간 (체험권)", "", "테스트_체험_", 60),                             # Experience -> Seat 1,2,3,5,6
+                ("1,2종 면허 취득 상담 및 이용 문의", "리뷰노트 작성 희망", "테스트_리뷰1_", 60), # Consultation+Review -> Should be 1,2,3,5,6 (Priority)
+                ("운전 연습(장롱 면허) 상담 및 이용 문의", "리뷰노트 희망", "테스트_리뷰2_", 60), # Consultation+Review -> Should be 1,2,3,5,6 (Priority)
+                ("1,2종 면허 취득 상담 및 이용 문의", "상담 신청합니다", "테스트_상담_", 30),     # Pure Consultation -> Seat 9
+                ("합격무제한", "", "테스트_무제한_", 60),                                # Default -> Seat 1,2,3,5,6
+                ("2종 시간제", "리뷰노트 희망", "테스트_리뷰_", 60),                      # Review -> Seat 1,2,3,5,6 (Fixed duration 60 vs 120)
+                ("2종 시간제", "1시간 이용", "테스트_일반_", 60)                      # Default -> Seat 1,2,3,5,6
+            ]
+            
+            for i, (prod, req, name_prefix, duration) in enumerate(test_cases):
+                # Random date between 20th and 23rd
+                day_offset = random.randint(0, 3)
+                target_date = base_date + datetime.timedelta(days=day_offset)
+                
+                # Random time between 10:00 and 18:00
+                res_hour = random.randint(10, 18)
+                
+                # Construct date_str matching '25. 12. 10.(수) 오전 9:00' format exactly
+                year_short = target_date.strftime("%y") # 25
+                mon = target_date.month
+                day = target_date.day
+                wday = weekday_map[target_date.weekday()]
+                
+                ampm = "오전" if res_hour < 12 else "오후"
+                display_hour = res_hour if res_hour <= 12 else res_hour - 12
+                if display_hour == 0: display_hour = 12
+                
+                # Format: '25. 12. 20.(토) 오후 2:00'
+                date_str = f"{year_short}. {mon}. {day}.({wday}) {ampm} {display_hour}:00"
+                
+                name = f"{name_prefix}{random.randint(1, 100)}"
+                phone = f"010-{random.randint(1000,9999)}-{random.randint(1000,9999)}"
+                
+                # Construct raw_data for completeness
+                raw_data = f"[확정] {name} | {date_str} | {prod} | {req} | {phone}"
+                
+                dummy_data.append({
+                    'source': 'Naver',
+                    'raw_data': raw_data,
+                    'name': name,
+                    'status': '확정',
+                    'date_str': date_str,
+                    'product': prod,
+                    'request': req,
+                    'phone': phone,
+                    'duration_min': duration
+                })
+                
+            time.sleep(1) # Simulate network delay
+            self.finished.emit(dummy_data)
+            # --- DUMMY MODE END ---
+            
+            # Original Code (Commented out)
+            # data = self.client.get_reservations()
+            # print(f"DEBUG_COLLECTED_DATA: {data}")
+            # self.finished.emit(data)
+            
+            # Original Code (Commented out)
+            # data = self.client.get_reservations()
+            # self.finished.emit(data)
 
 class KakaoWorker(QObject):
     finished = pyqtSignal(list)
@@ -598,22 +667,30 @@ class ReservationCollectorWidget(QWidget):
         data = {'name': '', 'date': '', 'time': ''}
         
         # Regex patterns
-        date_pattern = r"(\d{4}-\d{2}-\d{2})|(\d{1,2}월\s*\d{1,2}일)"
+        date_pattern = r"(\d{4}-\d{2}-\d{2})|(\d{1,2}월\s*\d{1,2}일)|(\d{4}/\d{1,2}/\d{1,2})|(\d{1,2}/\d{1,2}/\d{4})"
         time_pattern = r"(\d{1,2}:\d{2})"
         
         # Find Date
         date_match = re.search(date_pattern, text)
         if date_match:
             d_str = date_match.group(0)
-            if "월" in d_str: # Convert "MM월 DD일" to "YYYY-MM-DD" (Assume current year)
+            if "월" in d_str: # Convert "MM월 DD일" to "YYYY-MM-DD"
                 try:
                     today = datetime.date.today()
                     month, day = map(int, re.findall(r"\d+", d_str))
-                    # Handle year crossing? For now assume current/next year logic if needed, or just current year
                     year = today.year
-                    if month < today.month: # Assuming next year if month is earlier
+                    if month < today.month: 
                         year += 1
                     data['date'] = f"{year}-{month:02d}-{day:02d}"
+                except:
+                    pass
+            elif "/" in d_str: # Handle slash formats
+                try:
+                    parts = d_str.split('/')
+                    if len(parts[0]) == 4: # YYYY/MM/DD
+                        data['date'] = f"{parts[0]}-{int(parts[1]):02d}-{int(parts[2]):02d}"
+                    else: # MM/DD/YYYY
+                        data['date'] = f"{parts[2]}-{int(parts[0]):02d}-{int(parts[1]):02d}"
                 except:
                     pass
             else:
@@ -821,7 +898,19 @@ class ReservationCollectorWidget(QWidget):
                 
                 # Get visible data (in case user edited, though currently read-only)
                 name = name_item.text()
-                date = self.table.item(i, 3).text()
+                date = self.table.item(i, 3).text().strip()
+                
+                # Normalize date to YYYY-MM-DD if users used slashes
+                if "/" in date:
+                    try:
+                        parts = date.split('/')
+                        if len(parts[0]) == 4: # YYYY/MM/DD
+                            date = f"{parts[0]}-{int(parts[1]):02d}-{int(parts[2]):02d}"
+                        else: # MM/DD/YYYY
+                            date = f"{parts[2]}-{int(parts[0]):02d}-{int(parts[1]):02d}"
+                    except:
+                        pass # Keep original if parse fails
+                        
                 time_str = self.table.item(i, 4).text()
                 
                 # Basic validation
