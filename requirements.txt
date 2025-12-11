@@ -1,5 +1,3 @@
 playwright
 python-dotenv
-beautifulsoup4
-PyQt6
-schedule
+python-dateutil
