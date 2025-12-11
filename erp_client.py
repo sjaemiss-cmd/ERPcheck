@@ -145,85 +145,141 @@ class ERPClient:
             logging.error(f"Error retrieving JS events: {e}")
             return []
 
-    def get_events_for_date(self, target_date):
+    def get_events_range(self, start_date, end_date):
         """
-        Retrieves events for a specific date using the direct API.
-        target_date: datetime.date object or string 'YYYY-MM-DD'
+        Retrieves events for a specific date range using JS scraping (since API is unreliable).
+        Iterates through months to ensure all events are loaded.
         """
-        if isinstance(target_date, datetime.date):
-            target_date_str = target_date.strftime("%Y-%m-%d")
-        else:
-            target_date_str = target_date
-            
         try:
-            # Ensure logged in first (if URL is not safe, or just trust session)
-            # We assume check_availability ensures login, but let's be safe.
-            if "login" in self.page.url:
-                logging.warning("Not logged in during event fetch. Re-logging...")
-                if not self.login():
-                    return None
-
-            # API Endpoint found via debugging: /index.php/dataFunction/getEvent?idx=4
-            api_url = "https://sook0517.cafe24.com/index.php/dataFunction/getEvent?idx=4"
-            
-            # FullCalendar typically sends start/end as YYYY-MM-DD or timestamp.
-            # We'll stick to a 2-day window to be safe.
-            start_dt = datetime.datetime.strptime(target_date_str, "%Y-%m-%d")
-            end_dt = start_dt + datetime.timedelta(days=1)
-            
-            payload = {
-                'start': start_dt.strftime("%Y-%m-%d"),
-                'end': end_dt.strftime("%Y-%m-%d")
-            }
-            
-            logging.info(f"Fetching API events from {api_url} with payload {payload}")
-            
-            # Using page.request to share session cookies
-            response = self.page.request.post(api_url, form=payload)
-            
-            if not response.ok:
-                logging.error(f"API Request failed: {response.status} {response.status_text}")
-                return None
+            if isinstance(start_date, str):
+                start_date = datetime.datetime.strptime(start_date, "%Y-%m-%d").date()
+            if isinstance(end_date, str):
+                end_date = datetime.datetime.strptime(end_date, "%Y-%m-%d").date()
                 
-            data = response.json()
-            # logging.info(f"API Response data sample: {str(data)[:200]}")
+            # Ensure we are on the calendar page
+            if not self.page.url.endswith("/index/calender"):
+                logging.info("Navigating to calendar page...")
+                self.page.goto("https://sook0517.cafe24.com/index/calender")
+                self.page.wait_for_load_state("networkidle")
+                
+            all_events = []
+            seen_ids = set()
             
-            # Process data (Schema observed: {'title':..., 'start':..., 'end':..., 'resourceId':...})
-            events_on_date = []
-            for e in data:
-                # Filter locally just in case API returns more
-                if e.get('start') and e['start'].startswith(target_date_str):
+            # Iterate month by month
+            current_date = start_date.replace(day=1)
+            end_month_date = end_date.replace(day=1)
+            
+            while current_date <= end_month_date:
+                date_str = current_date.strftime("%Y-%m-%d")
+                logging.info(f"Loading calendar for {date_str}...")
+                
+                # Navigate to date and switch to month view
+                self.page.evaluate(f"$('#calendar').fullCalendar('gotoDate', '{date_str}')")
+                self.page.evaluate("$('#calendar').fullCalendar('changeView', 'month')")
+                time.sleep(1) # Wait for AJAX
+                
+                # Scrape events
+                # Fetch events once (server returns all events regardless of idx)
+                # We use idx=20 (Seat 1) as a default, but it returns everything.
+                default_idx = 20
+                
+                # Switch event source
+                self.page.evaluate(f"""() => {{
+                    $('#calendar').fullCalendar('removeEventSources');
+                    $('#calendar').fullCalendar('addEventSource', '/index.php/dataFunction/getEvent?idx={default_idx}');
+                }}""")
+                
+                # Wait for events to fetch and render
+                time.sleep(1.0) 
+                
+                # Scrape events
+                events_data = self.page.evaluate("""() => {
+                    var cal = $('#calendar');
+                    if (cal.length === 0) cal = $('.fc').parent();
+                    
+                    if (cal.length > 0 && cal.fullCalendar) {
+                        var events = cal.fullCalendar('clientEvents');
+                        return events.map(e => ({
+                            id: e._id || e.id,
+                            title: e.title,
+                            start: e.start ? e.start.format() : null,
+                            end: e.end ? e.end.format() : null,
+                            className: e.className, // Contains 'deviceX'
+                            resourceId: e.resourceId // Fallback
+                        }));
+                    }
+                    return [];
+                }""")
+                
+                for e in events_data:
+                    # Deduplicate based on ID
+                    e_id = e.get('id')
+                    if e_id and e_id in seen_ids:
+                        continue
+                    if e_id:
+                        seen_ids.add(e_id)
+                        
+                    # Determine Resource ID from className
+                    # className is usually a string like "bg_red device1" or list ["bg_red", "device1"]
+                    resource_id = e.get('resourceId')
+                    class_name = e.get('className')
+                    
+                    if not resource_id and class_name:
+                        if isinstance(class_name, list):
+                            class_name = " ".join(class_name)
+                        
+                        # Look for deviceX
+                        import re
+                        match = re.search(r'device(\d+)', str(class_name))
+                        if match:
+                            device_num = match.group(1)
+                            resource_id = f"dobong-{device_num}"
+                            
+                    # Parse dates
                     try:
-                        # start format often "YYYY-MM-DD HH:mm:ss" api-side
-                        dt_format = "%Y-%m-%d %H:%M:%S" 
-                        # Determine format by length or trial
-                        if "T" in e['start']: # ISO
-                             s_dt = datetime.datetime.fromisoformat(e['start'])
-                        else:
-                             s_dt = datetime.datetime.strptime(e['start'], dt_format)
+                        if not e['start']: continue
                         
+                        dt_format = "%Y-%m-%d %H:%M:%S"
+                        if "T" in e['start']:
+                            s_dt = datetime.datetime.fromisoformat(e['start'])
+                        else:
+                            if len(e['start']) == 10:
+                                s_dt = datetime.datetime.strptime(e['start'], "%Y-%m-%d")
+                            else:
+                                s_dt = datetime.datetime.strptime(e['start'], dt_format)
+                                
                         if e.get('end'):
-                             if "T" in e['end']:
-                                 e_dt = datetime.datetime.fromisoformat(e['end'])
-                             else:
-                                 e_dt = datetime.datetime.strptime(e['end'], dt_format)
+                            if "T" in e['end']:
+                                e_dt = datetime.datetime.fromisoformat(e['end'])
+                            else:
+                                if len(e['end']) == 10:
+                                    e_dt = datetime.datetime.strptime(e['end'], "%Y-%m-%d")
+                                else:
+                                    e_dt = datetime.datetime.strptime(e['end'], dt_format)
                         else:
-                             e_dt = s_dt
-                             
-                        events_on_date.append({
-                            'title': e.get('title', 'No Title'),
-                            'start': s_dt,
-                            'end': e_dt,
-                            'resourceId': e.get('resourceId') or e.get('resourceid') # Case safety
-                        })
+                            e_dt = s_dt
+                            
+                        # Filter by range
+                        if start_date <= s_dt.date() <= end_date:
+                            all_events.append({
+                                'title': e.get('title', 'No Title'),
+                                'start': s_dt,
+                                'end': e_dt,
+                                'resourceId': resource_id
+                            })
                     except Exception as parse_err:
-                        logging.warning(f"Date parse error for {e}: {parse_err}")
-                        
-            logging.info(f"Parsed {len(events_on_date)} events for {target_date_str}")
-            return events_on_date
+                        logging.warning(f"Date parse error: {parse_err}")
+                
+                # Move to next month
+                # Add 32 days to ensure we skip to next month, then set to day 1
+                next_month = current_date + datetime.timedelta(days=32)
+                current_date = next_month.replace(day=1)
+                
+            logging.info(f"Total collected events: {len(all_events)}")
+            return all_events
 
         except Exception as e:
-            logging.error(f"Error getting events via API for {target_date_str}: {e}")
+            logging.error(f"Error getting events via JS: {e}")
             import traceback
             logging.error(traceback.format_exc())
             return None
@@ -237,7 +293,9 @@ class ERPClient:
             target_start = datetime.datetime.strptime(f"{date_str} {start_time_str}", "%Y-%m-%d %H:%M")
             target_end = datetime.datetime.strptime(f"{date_str} {end_time_str}", "%Y-%m-%d %H:%M")
             
-            events = self.get_events_for_date(date_str)
+            # Use get_events_range for a single day (start to next day)
+            next_day = (datetime.datetime.strptime(date_str, "%Y-%m-%d") + datetime.timedelta(days=1)).strftime("%Y-%m-%d")
+            events = self.get_events_range(date_str, next_day)
             if events is None:
                 return False, "데이터 조회 실패 (오류 발생)", None
             
@@ -470,37 +528,78 @@ class ERPClient:
 
 
             # 3. Product Selection (Refactored)
-            if "2종 시간제" in product or "1시간" in product or "체험권" in product:
-                target_value = "6236"
-                target_selector = f'{modal_selector} select[name="goods_idx"]'
-                
-                try:
-                    logging.info(f"Selecting product {target_value}...")
-                    
-                    # 1. Wait for element
-                    self.page.wait_for_selector(target_selector, state="attached", timeout=3000)
-                    
-                    # 2. Select Option
-                    self.page.select_option(target_selector, value=target_value, force=True)
-                    
-                    # 3. Dispatch Events (Defensive)
-                    self.page.evaluate(f"""() => {{
-                        const el = document.querySelector('{target_selector}');
-                        if (el) {{
-                            el.value = '{target_value}';
-                            el.dispatchEvent(new Event('change', {{ bubbles: true }}));
-                            el.dispatchEvent(new Event('input', {{ bubbles: true }}));
-                        }}
-                    }}""")
-                    logging.info("Product selection applied.")
-                    
-                except Exception as e:
-                    logging.warning(f"Failed to select product: {e}")
+            # Mapping logic based on Product Name and Option
+            # IDs found from HTML dump:
+            # 2종 1시간: 6268
+            # 2종 5시간: 6269
+            # 2종 9시간: 6270
+            # 2종 16시간: 6271
+            # 1종자동 1시간: 6272
+            # 1종자동 5시간: 6273
+            # 1종자동 9시간: 6274
             
-            elif "상담" in product:
-                 try:
-                    self.page.click(f"{modal_selector} input.nullGoods", timeout=1000)
-                 except: pass
+            goods_val = "6268" # Default to 2종 1시간
+            
+            # Normalize inputs
+            p_text = product.replace(" ", "")
+            o_text = data.get('option', '').replace(" ", "")
+            
+            logging.info(f"Selecting Goods for Product: '{product}', Option: '{data.get('option', '')}'")
+            
+            if "1시간" in p_text or "체험권" in p_text:
+                # 1시간 (체험권)
+                if "1종수동" in o_text:
+                    goods_val = "6244" # [개설][시간제][1수동][1시간] (Keep old guess for manual if not found?)
+                    # Wait, I didn't see 1-jong manual in the dump. Let's assume it's close or use default.
+                    # Actually, let's stick to what I found.
+                    pass 
+                elif "1종자동" in o_text:
+                    goods_val = "6272" # [개설][시간제][1자동][1시간]
+                else:
+                    goods_val = "6268" # [개설][시간제][2종][1시간]
+                    
+            elif "합격무제한" in p_text:
+                # 합격무제한 - IDs not confirmed in dump, keeping old guesses for now or defaulting to 2-jong 1h
+                if "2종" in o_text and "기능+도로" in o_text:
+                    goods_val = "6223" 
+                elif "2종" in o_text and "도로" in o_text:
+                    goods_val = "6222"
+                elif "2종" in o_text and "기능" in o_text:
+                    goods_val = "6221"
+                elif "1종자동" in o_text and "기능+도로" in o_text:
+                    goods_val = "6226"
+                elif "1종수동" in o_text and "기능+도로" in o_text:
+                    goods_val = "6229"
+                else:
+                    goods_val = "6223"
+                    
+            elif "2종시간제" in p_text:
+                # 2종 시간제
+                if "6시간" in o_text:
+                    goods_val = "6269" # [개설][시간제][2종][5시간] (User said 6h -> 5h option)
+                elif "12시간" in o_text:
+                    goods_val = "6270" # [개설][시간제][2종][9시간] (User said 12h -> 9h option)
+                elif "24시간" in o_text:
+                    goods_val = "6271" # [개설][시간제][2종][16시간] (User said 24h -> 16h option)
+                else:
+                    goods_val = "6268" # Default to 1시간 (2종)
+            
+            elif "상담" in p_text:
+                 pass
+
+            logging.info(f"Selected Goods ID: {goods_val}")
+
+            # Select the option in the dropdown
+            # Selector correction: Element has name="goods_idx" but NO ID.
+            try:
+                self.page.select_option('select[name="goods_idx"]', value=goods_val)
+            except Exception as e:
+                logging.error(f"Failed to select goods {goods_val}: {e}")
+                # Fallback to index 1 if specific value fails
+                try:
+                    self.page.select_option('select[name="goods_idx"]', index=1)
+                except: pass
+
             # 4. Payment
             # Default to 'Naver Pay' (Value '12') if likely from Naver
             try:

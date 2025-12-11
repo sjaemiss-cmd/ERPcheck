@@ -129,6 +129,12 @@ class NaverClient:
                         # Extract Phone Number (BookingListView__phone)
                         phone_cell = row.locator("div[class*='BookingListView__phone']").first
                         phone_text = phone_cell.inner_text().strip() if phone_cell.count() > 0 else ""
+
+                        # Extract Option (BookingListView__option)
+                        # This usually appears below the product name or in a separate column depending on view
+                        # We look for a div with class containing 'option' within the row
+                        option_cell = row.locator("div[class*='BookingListView__option']").first
+                        option_text = option_cell.inner_text().strip() if option_cell.count() > 0 else ""
                         
                         # Calculate Duration
                         duration_min = 30 # Default
@@ -154,8 +160,8 @@ class NaverClient:
                         # Or better, let's try to normalize it here.
                         
                         # Combine for raw_data (legacy support for GUI display)
-                        # Format: [Status] Name | Date: ... | Product: ... | Request: ... | Phone: ...
-                        raw_data = f"[{status_text}] {name_text} | {date_text} | {product_text} | {request_text} | {phone_text}"
+                        # Format: [Status] Name | Date: ... | Product: ... | Option: ... | Request: ... | Phone: ...
+                        raw_data = f"[{status_text}] {name_text} | {date_text} | {product_text} | {option_text} | {request_text} | {phone_text}"
                         
                         logging.info(f"Collected: {raw_data}")
                         
@@ -166,6 +172,7 @@ class NaverClient:
                             'status': status_text,
                             'date_str': date_text, # Raw date string
                             'product': product_text,
+                            'option': option_text,
                             'request': request_text,
                             'phone': phone_text,
                             'duration_min': duration_min

@@ -9,7 +9,7 @@ from PyQt6.QtWidgets import (QApplication, QSystemTrayIcon, QMenu, QMessageBox,
                              QMainWindow, QVBoxLayout, QLabel, QLineEdit, QPushButton, 
                              QListWidget, QWidget, QCheckBox, QHBoxLayout, QProgressDialog,
                              QTabWidget, QTableWidget, QTableWidgetItem, QHeaderView)
-from PyQt6.QtGui import QIcon, QAction, QCloseEvent
+from PyQt6.QtGui import QIcon, QAction, QCloseEvent, QColor
 from erp_client import ERPClient
 from naver_client import NaverClient
 from kakao_client import KakaoClient
@@ -458,77 +458,14 @@ class NaverWorker(QObject):
             result = self.client.login()
             self.login_finished.emit(result)
         elif self.mode == "collect":
-            # --- DUMMY MODE START (REALISTIC STRUCTURE) ---
-            print("Running in TEST MODE: Generating realistic dummy reservations...")
-            import random
-            
-            dummy_data = []
-            
-            # Date range: 2025-12-20 to 2025-12-23
-            base_date = datetime.date(2025, 12, 20)
-            weekday_map = {0: '월', 1: '화', 2: '수', 3: '목', 4: '금', 5: '토', 6: '일'}
-            
-            test_cases = [
-                ("1시간 (체험권)", "", "테스트_체험_", 60),                             # Experience -> Seat 1,2,3,5,6
-                ("1,2종 면허 취득 상담 및 이용 문의", "리뷰노트 작성 희망", "테스트_리뷰1_", 60), # Consultation+Review -> Should be 1,2,3,5,6 (Priority)
-                ("운전 연습(장롱 면허) 상담 및 이용 문의", "리뷰노트 희망", "테스트_리뷰2_", 60), # Consultation+Review -> Should be 1,2,3,5,6 (Priority)
-                ("1,2종 면허 취득 상담 및 이용 문의", "상담 신청합니다", "테스트_상담_", 30),     # Pure Consultation -> Seat 9
-                ("합격무제한", "", "테스트_무제한_", 60),                                # Default -> Seat 1,2,3,5,6
-                ("2종 시간제", "리뷰노트 희망", "테스트_리뷰_", 60),                      # Review -> Seat 1,2,3,5,6 (Fixed duration 60 vs 120)
-                ("2종 시간제", "1시간 이용", "테스트_일반_", 60)                      # Default -> Seat 1,2,3,5,6
-            ]
-            
-            for i, (prod, req, name_prefix, duration) in enumerate(test_cases):
-                # Random date between 20th and 23rd
-                day_offset = random.randint(0, 3)
-                target_date = base_date + datetime.timedelta(days=day_offset)
-                
-                # Random time between 10:00 and 18:00
-                res_hour = random.randint(10, 18)
-                
-                # Construct date_str matching '25. 12. 10.(수) 오전 9:00' format exactly
-                year_short = target_date.strftime("%y") # 25
-                mon = target_date.month
-                day = target_date.day
-                wday = weekday_map[target_date.weekday()]
-                
-                ampm = "오전" if res_hour < 12 else "오후"
-                display_hour = res_hour if res_hour <= 12 else res_hour - 12
-                if display_hour == 0: display_hour = 12
-                
-                # Format: '25. 12. 20.(토) 오후 2:00'
-                date_str = f"{year_short}. {mon}. {day}.({wday}) {ampm} {display_hour}:00"
-                
-                name = f"{name_prefix}{random.randint(1, 100)}"
-                phone = f"010-{random.randint(1000,9999)}-{random.randint(1000,9999)}"
-                
-                # Construct raw_data for completeness
-                raw_data = f"[확정] {name} | {date_str} | {prod} | {req} | {phone}"
-                
-                dummy_data.append({
-                    'source': 'Naver',
-                    'raw_data': raw_data,
-                    'name': name,
-                    'status': '확정',
-                    'date_str': date_str,
-                    'product': prod,
-                    'request': req,
-                    'phone': phone,
-                    'duration_min': duration
-                })
-                
-            time.sleep(1) # Simulate network delay
-            self.finished.emit(dummy_data)
-            # --- DUMMY MODE END ---
-            
-            # Original Code (Commented out)
-            # data = self.client.get_reservations()
-            # print(f"DEBUG_COLLECTED_DATA: {data}")
-            # self.finished.emit(data)
-            
-            # Original Code (Commented out)
-            # data = self.client.get_reservations()
-            # self.finished.emit(data)
+            # --- REAL MODE ---
+            try:
+                data = self.client.get_reservations()
+                print(f"DEBUG_COLLECTED_DATA: {len(data)} items")
+                self.finished.emit(data)
+            except Exception as e:
+                print(f"Naver collect error: {e}")
+                self.finished.emit([])
 
 class KakaoWorker(QObject):
     finished = pyqtSignal(list)
@@ -612,6 +549,34 @@ class ERPWorker(QObject):
             self.finished.emit(f"오류 발생: {e}")
             if client:
                 client.close()
+
+class CalendarWorker(QObject):
+    finished = pyqtSignal(list)
+    
+    def __init__(self, start_date, end_date, erp_creds=None):
+        super().__init__()
+        self.start_date = start_date
+        self.end_date = end_date
+        self.erp_creds = erp_creds
+
+    def run(self):
+        erp_id = self.erp_creds.get('id') if self.erp_creds else None
+        erp_password = self.erp_creds.get('password') if self.erp_creds else None
+        
+        # Headless=True for background fetching
+        client = ERPClient(headless=True, erp_id=erp_id, erp_password=erp_password)
+        try:
+            client.start()
+            if client.login():
+                events = client.get_events_range(self.start_date, self.end_date)
+                self.finished.emit(events if events else [])
+            else:
+                self.finished.emit([])
+            client.close()
+        except Exception as e:
+            logging.error(f"CalendarWorker Error: {e}")
+            self.finished.emit([])
+
 
 class ReservationCollectorWidget(QWidget):
     def __init__(self):
@@ -834,6 +799,7 @@ class ReservationCollectorWidget(QWidget):
                 parsed['date'] = parsed_dt['date']
                 parsed['start_time'] = parsed_dt['time']
                 parsed['product'] = item.get('product', '')
+                parsed['option'] = item.get('option', '')
                 parsed['request'] = item.get('request', '')
                 parsed['phone'] = item.get('phone', '')
                 
@@ -929,13 +895,24 @@ class ReservationCollectorWidget(QWidget):
                         except:
                             end_time = start_time
 
+                    # Extract Seat ID from Status column (index 5) if available
+                    status_text = self.table.item(i, 5).text()
+                    seat_id = None
+                    if "가능 (" in status_text:
+                        # Format: "가능 (dobong-X)" or "예약 가능 (dobong-X)"
+                        try:
+                            seat_id = status_text.split("(")[1].split(")")[0]
+                        except:
+                            pass
+                            
                     # Merge original data with current values
                     data = original_data.copy()
                     data.update({
                         'name': name,
                         'date': date,
                         'start_time': start_time,
-                        'end_time': end_time
+                        'end_time': end_time,
+                        'seat_id': seat_id
                     })
 
                     selected.append({
@@ -962,15 +939,198 @@ class ReservationCollectorWidget(QWidget):
              QMessageBox.warning(self, "경고", "ERP 설정이 없습니다. '누락 확인' 탭에서 로그인 정보를 입력하고 저장(확인 버튼)해주세요.")
              return
 
-        self.lbl_status.setText("가능 여부 확인 중...")
+        self.lbl_status.setText("예약 데이터 불러오는 중 (향후 2주)...")
         self.btn_check.setEnabled(False)
         
-        self.erp_worker = ERPWorker(mode='check', data=rows, erp_creds=creds)
-        self.erp_worker.status_update.connect(self.update_row_status)
-        self.erp_worker.finished.connect(self.on_erp_finished)
+        # Fetch 2 weeks of data
+        today = datetime.date.today()
+        start_date = today
+        end_date = today + datetime.timedelta(weeks=2)
         
-        self.worker_thread = threading.Thread(target=self.erp_worker.run)
+        self.calendar_worker = CalendarWorker(start_date, end_date, creds)
+        self.calendar_worker.finished.connect(self.on_availability_data_loaded)
+        
+        self.worker_thread = threading.Thread(target=self.calendar_worker.run)
         self.worker_thread.start()
+
+    def on_availability_data_loaded(self, events):
+        self.btn_check.setEnabled(True)
+        self.lbl_status.setText(f"데이터 로드 완료 ({len(events)}건). 가능 여부 판별 중...")
+        
+        rows = self.get_selected_rows()
+        
+        for row in rows:
+            row_idx = row['row_index']
+            data = row['data']
+            
+            status = "확인 필요"
+            color = "black"
+            
+            try:
+                # Parse requested date/time
+                req_date = datetime.datetime.strptime(data['date'], "%Y-%m-%d").date()
+                req_start_time = datetime.datetime.strptime(f"{data['date']} {data['start_time']}", "%Y-%m-%d %H:%M")
+                
+                # 1. Check Operating Hours
+                # Weekdays (0-4): 09:00 - 21:00
+                # Saturday (5): 10:00 - 18:00
+                # Sunday (6): Closed (Assume closed for now, or check specific logic)
+                
+                weekday = req_date.weekday()
+                hour = req_start_time.hour
+                
+                is_open = False
+                if 0 <= weekday <= 4: # Mon-Fri
+                    if 9 <= hour < 21:
+                        is_open = True
+                elif weekday == 5: # Sat
+                    if 10 <= hour < 18:
+                        is_open = True
+                
+                if not is_open:
+                    status = "영업시간 아님"
+                    color = "red"
+                else:
+                    # Determine Request Type (Consultation vs Driving)
+                    has_consultation = "상담" in data.get('product', '') or "상담" in data.get('raw_data', '')
+                    has_review_note = "리뷰노트" in data.get('request', '') or "리뷰노트" in data.get('raw_data', '')
+                    
+                    # Review Note overrides Consultation -> Treated as Driving
+                    is_consultation = has_consultation and not has_review_note
+                    
+                    # Filter Events based on type
+                    # Driving Seats: 1, 2, 3, 5, 6 (Exclude 4, 7, 8, 9) 
+                    # Note: User mentioned 4 is Operation. 7, 8 are likely valid seats too? 
+                    # User said: "운용가능한 기기 5대중 4대가 차있고" -> implies 5 driving seats.
+                    # Let's assume 1, 2, 3, 5, 6 are the main driving seats.
+                    # Seat 4 is Operation.
+                    # Seat 9 is Consultation.
+                    # What about 7, 8? 
+                    # In the grid view code, I highlighted 4, 7, 8. 
+                    # User said "dobong-4번은 운영시간... 항상 '운영'이라는 이름...".
+                    # User said "운용가능한 기기 5대".
+                    # If 1, 2, 3, 5, 6 are the 5 seats, then 7 and 8 are also excluded?
+                    # Let's stick to the user's implication: "Driving Capacity = 5".
+                    # So we count events on 1, 2, 3, 5, 6.
+                    
+                    overlap_count = 0
+                    overlapping_events = []
+                    
+                    # Define target seats based on request type
+                    target_seats = []
+                    max_capacity = 0
+                    
+                    if is_consultation:
+                        target_seats = ['dobong-9'] # Consultation Seat
+                        max_capacity = 1
+                    else:
+                        # Driving Seats: 1, 2, 3, 5, 6
+                        target_seats = ['dobong-1', 'dobong-2', 'dobong-3', 'dobong-5', 'dobong-6']
+                        max_capacity = 5
+                    
+                    occupied_seats = set()
+                    
+                    # Check overlaps
+                    for e in events:
+                        # Check Seat
+                        r_id = str(e.get('resourceId', ''))
+                        
+                        # Normalize r_id to match target_seats format (dobong-X)
+                        seat_match = None
+                        for ts in target_seats:
+                            if ts in r_id:
+                                seat_match = ts
+                                break
+                        
+                        if not seat_match:
+                            # Try number matching if r_id is just '1', '2', etc.
+                            try:
+                                if '-' in r_id:
+                                    num = r_id.split('-')[-1]
+                                else:
+                                    num = r_id
+                                
+                                for ts in target_seats:
+                                    ts_num = ts.split('-')[-1]
+                                    if num == ts_num:
+                                        seat_match = ts
+                                        break
+                            except: pass
+                            
+                        if not seat_match:
+                            continue
+
+                        e_start = e['start']
+                        e_end = e['end']
+                        
+                        # Check time overlap
+                        req_end_time = req_start_time + datetime.timedelta(hours=1) # Default 1h
+                        if data.get('end_time'):
+                             try:
+                                 req_end_time = datetime.datetime.strptime(f"{data['date']} {data['end_time']}", "%Y-%m-%d %H:%M")
+                             except:
+                                 pass
+                        
+                        if e_start < req_end_time and e_end > req_start_time:
+                            occupied_seats.add(seat_match)
+                            
+                    overlap_count = len(occupied_seats)
+                    
+                    if overlap_count >= max_capacity:
+                        if is_consultation:
+                            status = "상담 마감"
+                        else:
+                            status = f"예약 마감 ({overlap_count}/{max_capacity})"
+                        color = "red"
+                    else:
+                        # Find first available seat
+                        available_seat = None
+                        for ts in target_seats:
+                            if ts not in occupied_seats:
+                                available_seat = ts
+                                break
+                                
+                        # 3. Check Conflicts (Duplicate Booking)
+                        req_name = data['name'].replace(" ", "")
+                        is_duplicate = False
+                        
+                        for e in events: # Check all events for duplicate name
+                             e_start = e['start']
+                             e_end = e['end']
+                             if e_start.date() != req_date: continue
+                             
+                             e_title = e['title'].replace(" ", "")
+                             if req_name in e_title:
+                                 # Check time overlap
+                                 req_end_time = req_start_time + datetime.timedelta(hours=1)
+                                 if data.get('end_time'):
+                                     try:
+                                         req_end_time = datetime.datetime.strptime(f"{data['date']} {data['end_time']}", "%Y-%m-%d %H:%M")
+                                     except:
+                                         pass
+                                         
+                                 if e_start < req_end_time and e_end > req_start_time:
+                                     is_duplicate = True
+                                     break
+                        
+                        if is_duplicate:
+                            status = "중복 예약"
+                            color = "red"
+                        else:
+                            if is_consultation:
+                                status = f"가능 ({available_seat})" if available_seat else "상담 가능"
+                            else:
+                                status = f"가능 ({available_seat})" if available_seat else f"예약 가능 ({overlap_count}/{max_capacity})"
+                            color = "green"
+                        
+            except Exception as e:
+                logging.error(f"Validation error for row {row_idx}: {e}")
+                status = "오류"
+                color = "red"
+            
+            self.update_row_status(row_idx, status, color)
+            
+        self.lbl_status.setText("가능 여부 확인 완료")
 
     def run_register(self):
         rows = self.get_selected_rows()
@@ -1038,6 +1198,7 @@ class MainWindow(QMainWindow):
         
         self.tabs.addTab(self.missing_memo_widget, "누락 확인")
         self.tabs.addTab(self.reservation_widget, "예약 수집")
+        
         self.tabs.addTab(self.settings_widget, "설정")
         
         self.layout.addWidget(self.tabs)
