@@ -31,11 +31,20 @@ contextBridge.exposeInMainWorld('api', {
         getTodayEducation: () => ipcRenderer.invoke('erp:getTodayEducation'),
         getStudentDetail: (id: string) => ipcRenderer.invoke('erp:getStudentDetail', { id }),
         updateMemo: (id: string, memo: string, name: string, time: string) => ipcRenderer.invoke('erp:updateMemo', { id, memo, name, time }),
-        writeMemosBatch: (memoList: { index: number; text: string; name: string; time: string }[]) =>
+        writeMemosBatch: (memoList: { index: number; text: string; id: string; name: string; time: string }[]) =>
             ipcRenderer.invoke('erp:writeMemosBatch', { memoList }),
+        deleteHistory: (id: string, history: any) => ipcRenderer.invoke('erp:deleteHistory', { id, history }),
+        updateHistory: (id: string, oldHistory: any, newHistory: any) => ipcRenderer.invoke('erp:updateHistory', { id, oldHistory, newHistory }),
+        setHeadless: (headless: boolean) => ipcRenderer.invoke('erp:setHeadless', { headless }),
     },
     scraper: {
         naverLogin: () => ipcRenderer.invoke('scraper:naverLogin'),
-        getNaverReservations: () => ipcRenderer.invoke('scraper:getNaverReservations'),
+        kakaoLogin: () => ipcRenderer.invoke('scraper:kakaoLogin'),
+        getNaverBookings: () => ipcRenderer.invoke('scraper:getNaverBookings'),
+        getKakaoBookings: () => ipcRenderer.invoke('scraper:getKakaoBookings'),
+    },
+    settings: {
+        saveCredentials: (creds: any) => ipcRenderer.invoke('settings:saveCredentials', creds),
+        getCredentials: () => ipcRenderer.invoke('settings:getCredentials'),
     }
 })

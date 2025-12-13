@@ -1,6 +1,8 @@
-import { chromium, Browser, Page } from 'playwright'
+import { chromium, Browser, Page, Locator } from 'playwright'
+import * as cheerio from 'cheerio'
+import iconv from 'iconv-lite';
 import { ipcMain } from 'electron'
-import { DailyData, Student } from './types'
+import { DailyData, Student, EducationData } from './types'
 
 export class ErpService {
     private browser: Browser | null = null
@@ -41,6 +43,23 @@ export class ErpService {
         ipcMain.handle('erp:writeMemosBatch', async (_, { memoList }) => {
             return await this.writeMemosBatch(memoList)
         })
+
+        ipcMain.handle('erp:deleteHistory', async (_, { id, history }) => {
+            return await this.deleteHistory(id, history)
+        })
+
+        ipcMain.handle('erp:updateHistory', async (_, { id, oldHistory, newHistory }) => {
+            return await this.updateHistory(id, oldHistory, newHistory)
+        })
+
+        ipcMain.handle('erp:setHeadless', async (_, { headless }) => {
+            this.isHeadless = headless
+            // If browser exists, we effectively just update the flag for next launch
+            // or we could close it if we want immediate effect, but user might be working.
+            // For now, simpler is better: next launch respects the flag.
+            console.log(`[ErpService] Headless mode set to: ${headless}`)
+            return true
+        })
     }
 
     async start() {
@@ -74,7 +93,6 @@ export class ErpService {
     async login(id: string, pass: string): Promise<boolean> {
         console.log(`[ErpService] login called with id: ${id}`)
         try {
-            this.isHeadless = false
             await this.start()
 
             if (!this.page) {
@@ -83,29 +101,39 @@ export class ErpService {
             }
             const page = this.page
 
-            // OPTIMIZATION: Check URL before navigating
-            if (page.url().includes('/index/calender') || page.url().includes('/index/main')) {
+            // HTTP URL (CRITICAL)
+            const BASE_URL = 'http://sook0517.cafe24.com'
+
+            // Check if matches HTTP url
+            if (page.url().startsWith(BASE_URL) && (page.url().includes('/index/calender') || page.url().includes('/index/main'))) {
                 console.log('[ErpService] Already logged in (URL check)')
                 return true
             }
 
-            await page.goto('https://sook0517.cafe24.com/', { waitUntil: 'domcontentloaded' })
+            // Navigate to HTTP
+            await page.goto(BASE_URL + '/', { waitUntil: 'domcontentloaded' })
 
+            // Check if redirected to main immediately (already logged in)
             if (page.url().includes('/index/calender') || page.url().includes('/index/main')) {
                 console.log('[ErpService] Already logged in')
                 return true
             }
 
             try {
-                await page.waitForSelector('input[name="id"]', { state: 'visible', timeout: 5000 })
-                await page.fill('input[name="id"]', id)
+                // Robust selectors based on browser analysis
+                const idInput = page.locator("input[name='id']").or(page.locator("input[placeholder='아이디']")).first()
+                await idInput.waitFor({ state: 'visible', timeout: 5000 })
+                await idInput.fill(id)
             } catch (e) {
                 console.error('[ErpService] ID input not found')
                 return false
             }
 
             try {
-                const pwdInput = page.locator('input[name="pwd"]').or(page.locator('input[type="password"]')).first()
+                const pwdInput = page.locator("input[name='pwd']")
+                    .or(page.locator("input[placeholder='비밀번호']"))
+                    .or(page.locator("input[type='password']")).first()
+
                 if (await pwdInput.count() > 0) {
                     await pwdInput.fill(pass)
                 } else {
@@ -117,7 +145,8 @@ export class ErpService {
                 return false
             }
 
-            await page.click('button[type="submit"]')
+            // Login Button - class .btn-primary or type submit
+            await page.click("button.btn-primary, button[type='submit']")
 
             try {
                 await page.waitForNavigation({ timeout: 10000, waitUntil: 'domcontentloaded' })
@@ -140,226 +169,161 @@ export class ErpService {
         }
     }
 
-    async getTodayEducation(): Promise<DailyData> {
-        console.log('[ErpService] getTodayEducation called')
-        if (this.isBusy) {
-            return { operationTime: '', students: [] }
+    public async getTodayEducation(): Promise<DailyData> {
+        console.log('[ErpService] getTodayEducation called (Throttled Network Mode)');
+
+        if (!this.browser) await this.start();
+        if (!this.page) return { operationTime: '', students: [] };
+        const page = this.page;
+
+        // Ensure we are on Calendar
+        const isCalendar = page.url().includes('calender');
+        if (!isCalendar) {
+            await this.login('dobong', '1010');
+            await page.waitForTimeout(1000);
+            if (!page.url().includes('calender')) {
+                await page.goto('http://sook0517.cafe24.com/index/calender');
+            }
+        } else {
+            await page.reload();
         }
-        this.isBusy = true
 
         try {
-            await this.start()
-            if (!this.page || this.page.isClosed()) {
-                this.isBusy = false
-                return { operationTime: '', students: [] }
-            }
-            const page = this.page
-
-            if (!page.url().includes('/index/calender')) {
-                await page.goto('https://sook0517.cafe24.com/index/calender', { waitUntil: 'domcontentloaded' })
-                await page.waitForTimeout(1000)
-            }
-
-            // FullCalendar API를 통해 이벤트 데이터 추출
-            const eventsData = await page.evaluate(() => {
-                // @ts-ignore
-                const $ = window.$;
-                if (!$) return [];
-
-                let cal = $('#calendar');
-                if (cal.length === 0) cal = $('.fc').parent();
-
-                if (cal.length > 0 && cal.fullCalendar) {
-                    // @ts-ignore
-                    const events = cal.fullCalendar('clientEvents');
-                    // @ts-ignore
-                    return events.map((e: any) => ({
-                        id: e._id || e.id,
-                        title: e.title,
-                        start: e.start ? e.start.format() : null,
-                        end: e.end ? e.end.format() : null,
-                        className: e.className
-                    }));
-                }
-                return [];
-            });
-
-            console.log(`[ErpService] Raw JS Events found: ${eventsData.length}`);
-
-            const todayStr = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
-            // @ts-ignore
-            const todayEvents = eventsData.filter((e: any) => e.start && e.start.startsWith(todayStr));
-
-            // 시작 시간순 정렬
-            // @ts-ignore
-            todayEvents.sort((a: any, b: any) => (a.start || '').localeCompare(b.start || ''));
-
-            console.log(`[ErpService] Filtered Today's Events: ${todayEvents.length}`);
-
-            const result: DailyData = { operationTime: '', students: [] }
-
-            // @ts-ignore
-            for (let i = 0; i < todayEvents.length; i++) {
-                const e = todayEvents[i];
-                const title = e.title || '';
-
-                // 1. Operation Time Check
-                if (title.includes('운영')) {
-                    if (e.start && e.end) {
-                        const sTime = e.start.substring(11, 16); // HH:MM
-                        const eTime = e.end.substring(11, 16);
-                        result.operationTime = `${sTime} ~ ${eTime}`;
-                    } else {
-                        result.operationTime = title;
-                    }
-                    continue;
-                }
-
-                // 2. Name Parsing
-                let cleanTitle = title.replace(/\n/g, ' ').trim();
-                const tagsToRemove = ["[시간제]", "[미납]", "[보강]", "[예약]", "운영"];
-                tagsToRemove.forEach(tag => {
-                    cleanTitle = cleanTitle.split(tag).join('');
-                });
-                cleanTitle = cleanTitle.replace(/\d{1,2}:\d{2}\s*[-~]?\s*(\d{1,2}:\d{2})?/g, '').trim();
-
-                let name = '';
-                const parts = cleanTitle.split(/\s+/);
-                if (parts.length > 0) {
-                    name = parts[0];
-                    if (name.includes('/')) {
-                        name = name.split('/')[0];
-                    }
-                }
-
-                if (!name) continue;
-
-                // 3. Duration Calculation
-                let duration = 1.0;
-                if (e.start && e.end) {
-                    const start = new Date(e.start);
-                    const end = new Date(e.end);
-                    const diffMs = end.getTime() - start.getTime();
-                    duration = diffMs / (1000 * 60 * 60); // 시간 단위
-                }
-                duration = Math.round(duration * 10) / 10;
-
-                const timeStr = e.start ? e.start.substring(11, 16) : '';
-
-                // 4. 상세 정보 수집 (모달 열기)
-                let history: { date: string; content: string }[] = []
-                let generalMemo = ''
-                let photo = ''
-
-                try {
-                    // DOM 요소 찾기 (이름과 시간으로 매칭)
-                    const eventLocator = page.locator('.fc-event', { hasText: name }).filter({ hasText: timeStr }).first();
-
-                    if (await eventLocator.count() > 0) {
-                        await eventLocator.click({ force: true });
-
-                        // 모달 대기
-                        let modalVisible = false
-                        for (let attempt = 0; attempt < 3; attempt++) {
-                            try {
-                                await page.waitForSelector('#modifyMemberModal', { state: 'visible', timeout: 2000 })
-                                modalVisible = true
-                                break
-                            } catch (waitErr) {
-                                try {
-                                    if (await page.locator('#CalenderModalEdit').isVisible()) {
-                                        await page.evaluate(() => {
-                                            // @ts-ignore
-                                            if (typeof window.modMemberView === 'function') window.modMemberView()
-                                        })
-                                    }
-                                } catch (e) { }
-                                await page.waitForTimeout(500)
-                            }
-                        }
-
-                        if (modalVisible) {
-                            const scrapedData = await page.evaluate(() => {
-                                const modal = document.querySelector('#modifyMemberModal')
-                                if (!modal) return { memo: '', history: [], photo: '' }
-
-                                const memoEl = modal.querySelector("textarea[name='memo']") as HTMLTextAreaElement
-                                const memo = memoEl ? memoEl.value : ''
-
-                                const historyList: { date: string; content: string }[] = []
-                                const rows = modal.querySelectorAll('.form-inline')
-                                rows.forEach(row => {
-                                    const dateInput = row.querySelector("input[name='date[]']") as HTMLInputElement
-                                    const textInput = row.querySelector("input[name='comment[]']") as HTMLInputElement
-                                    if (dateInput && textInput && dateInput.value && textInput.value) {
-                                        historyList.push({ date: dateInput.value, content: textInput.value })
-                                    }
-                                })
-
-                                const img = modal.querySelector('img#photo_image') as HTMLImageElement
-                                const photoData = img ? img.src : ''
-
-                                return { memo, history: historyList, photo: photoData }
-                            })
-
-                            generalMemo = scrapedData.memo
-                            history = scrapedData.history
-                            photo = scrapedData.photo
-
-                            await page.evaluate(() => {
-                                // @ts-ignore
-                                $('#modifyMemberModal').modal('hide')
-                                // @ts-ignore
-                                $('#CalenderModalEdit').modal('hide')
-                                // @ts-ignore
-                                $('.modal').modal('hide')
-                            })
-                            await page.waitForTimeout(300)
-                        }
-                    }
-                } catch (err) {
-                    console.error(`[ErpService] Error fetching details for ${name}:`, err)
-                    try {
-                        await page.evaluate(() => {
-                            // @ts-ignore
-                            $('.modal').modal('hide')
-                        })
-                    } catch (e) { }
-                }
-
-                const student: Student = {
-                    id: String(i),
-                    name: name,
-                    time: timeStr,
-                    duration: duration,
-                    status: 'pending',
-                    type: '기타',
-                    history: history,
-                    generalMemo: generalMemo,
-                    photo: photo,
-                    index: i
-                }
-                result.students.push(student)
-            }
-
-            console.log('[ErpService] Closing browser...')
-            await this.browser?.close()
-            this.browser = null
-            this.page = null
-            this.isBusy = false
-
-            return result
-
-        } catch (e) {
-            console.error('[ErpService] Error in getTodayEducation:', e)
-            if (this.browser) {
-                await this.browser.close().catch(() => { })
-                this.browser = null
-                this.page = null
-            }
-            this.isBusy = false
-            return { operationTime: '', students: [] }
+            await page.waitForSelector('.fc-event', { timeout: 5000 });
+        } catch {
+            console.warn('[ErpService] No events found on calendar.');
+            return { operationTime: '', students: [] };
         }
+
+        // 1. Scan Metadata & Operation Time (Browser Context)
+
+        // Pass today's date (server time approx) to filter
+        const todayStr = new Date(new Date().getTime() + (9 * 60 * 60 * 1000)).toISOString().split('T')[0];
+        console.log(`[ErpService] Filtering events for today: ${todayStr}`);
+
+        const scanResult = await page.evaluate((targetDate) => {
+            // @ts-ignore
+            const $ = window.$;
+            const events: any[] = [];
+            let opTime = '';
+
+            $('.fc-event').each((i: number, el: HTMLElement) => {
+                const fcData = $(el).data('fcSeg');
+                if (!fcData) return;
+                const fcEvent = fcData.event;
+
+                // Date Filter
+                const eventDate = fcEvent.start.format('YYYY-MM-DD');
+                if (eventDate !== targetDate) return;
+
+                // Check Operation Time
+                if (fcEvent.title && fcEvent.title.includes('운영')) {
+                    const s = fcEvent.start.format('HH:mm');
+                    const e = fcEvent.end ? fcEvent.end.format('HH:mm') : s;
+                    opTime = `${s} ~ ${e}`;
+                    return;
+                }
+
+                events.push({
+                    id: fcEvent.id,
+                    title: fcEvent.title,
+                    start: fcEvent.start.format('HH:mm'),
+                    className: fcEvent.className.join(' '),
+                    duration: (fcEvent.end - fcEvent.start) / (1000 * 60 * 60)
+                });
+            });
+            return { events, opTime };
+        }, todayStr);
+
+        console.log(`[ErpService] Found ${scanResult.events.length} students. OpTime: ${scanResult.opTime}`);
+
+        // 2. Sequential Fetch with Delay (Throttling)
+        const students: Student[] = [];
+        const context = page.context();
+
+        for (const [index, ev] of scanResult.events.entries()) {
+            try {
+                // Name Sanitization
+                let cleanName = ev.title.replace(/<[^>]*>/g, '').replace(/\[.*?\]/g, '').trim();
+                cleanName = cleanName.split(' ')[0];
+
+                console.log(`[ErpService] Fetching ${cleanName} (${index + 1}/${scanResult.events.length})...`);
+
+                // Fetch Body via API
+                const response = await context.request.post('http://sook0517.cafe24.com/index.php/dataFunction/getBookingInfo', {
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+                        'Referer': 'http://sook0517.cafe24.com/index/calender',
+                        'Origin': 'http://sook0517.cafe24.com',
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+                    },
+                    form: { idx: ev.id, branch_idx: 4 }
+                });
+
+                const buffer = await response.body();
+                const decodedBody = iconv.decode(buffer as Buffer, 'euc-kr');
+
+                let $;
+                try {
+                    // API returns JSON with HTML in 'MEMO' field
+                    const jsonResponse = JSON.parse(decodedBody);
+                    // The 'MEMO' field contains the HTML for the history list
+                    const htmlContent = jsonResponse.MEMO || '';
+                    $ = cheerio.load(htmlContent);
+                    // console.log(`[ErpService] Parsed JSON for ${cleanName}`);
+                } catch (e) {
+                    console.warn(`[ErpService] Failed to parse JSON for ${cleanName}, trying raw HTML fallback`);
+                    $ = cheerio.load(decodedBody);
+                }
+
+                const memo = $('textarea[name="memo"]').val() as string || '';
+                const history: { date: string, content: string }[] = [];
+
+                $('.form-inline').each((_, row) => {
+                    const date = $(row).find('.modify_comment_date').val() as string;
+                    const content = $(row).find('.modify_comment_text').val() as string;
+                    if (date && content) history.push({ date, content });
+                });
+
+                console.log(`[ErpService] ${cleanName}: Found ${history.length} history items, Memo len: ${memo.length}`);
+
+                const photo = $('.view_picture img').attr('src') || '';
+
+                let status: any = 'assigned';
+                if (ev.className.includes('bg_blue')) status = 'registered';
+                else if (ev.className.includes('bg_green')) status = 'assigned';
+                else if (ev.className.includes('bg_yellow')) status = 'completed';
+
+                students.push({
+                    id: String(ev.id),
+                    name: cleanName,
+                    domIdentifier: ev.title,
+                    time: ev.start,
+                    duration: ev.duration || 1,
+                    status: status,
+                    type: '기타',
+                    generalMemo: memo,
+                    history: history,
+                    photo: photo,
+                    index: index
+                } as Student);
+
+                // Throttling: Wait 200ms
+                await new Promise(resolve => setTimeout(resolve, 200));
+
+            } catch (e) {
+                console.error(`[ErpService] Fetch failed for ${ev.title}`, e);
+            }
+        }
+
+        // Sort by time
+        students.sort((a, b) => a.time.localeCompare(b.time));
+
+        return {
+            operationTime: scanResult.opTime,
+            students: students
+        };
     }
 
     async getStudentDetail(_id: string): Promise<{ generalMemo: string; history: any[] }> {
@@ -367,54 +331,112 @@ export class ErpService {
     }
 
     // New helper method for core memo logic
-    private async _updateMemoCore(name: string, time: string, memo: string): Promise<boolean> {
+    private async _updateMemoCore(eventId: string, memo: string): Promise<boolean> {
+        console.log(`[ErpService] _updateMemoCore for ID ${eventId} with memo: ${memo}`)
         if (!this.page) return false
         const page = this.page
 
         try {
-            // Find event by Name and Time
-            const eventLocator = page.locator('.fc-event', { hasText: name }).filter({ hasText: time }).first()
+            // 1. Force Navigate Calendar to Today (KST) to ensure event is rendered
+            const todayKST = new Date().toLocaleString("en-US", { timeZone: "Asia/Seoul" });
+            const todayStr = new Date(todayKST).toISOString().split('T')[0]
 
-            if (await eventLocator.count() === 0) {
-                console.error(`[ErpService] Event not found for ${name} at ${time}`)
+            console.log(`[ErpService] Navigating calendar to ${todayStr}...`)
+            await page.evaluate((date) => {
+                // @ts-ignore
+                $('#calendar').fullCalendar('gotoDate', date);
+            }, todayStr);
+
+            // 2. Click Event by ID -> Opens Quick Modal (#CalenderModalEdit)
+            console.log('[ErpService] Waiting for events to load...')
+            await page.waitForTimeout(1000) // Render wait
+
+            // Use evaluate to find the event div by data-id attribute which fullCalendar renders
+            const clickSuccess = await page.evaluate((id) => {
+                // @ts-ignore
+                const $ = window.$;
+                // @ts-ignore
+                const events = $('#calendar').fullCalendar('clientEvents');
+                const event = events.find((e: any) => String(e.id) === String(id));
+                if (event) {
+                    // Trigger the click callback manually since finding the specific DOM element is hard
+                    // @ts-ignore
+                    $('#calendar').fullCalendar('option', 'eventClick')(event, {}, {
+                        // mock event object if needed
+                        pageX: 0, pageY: 0
+                    });
+                    return true;
+                }
+                return false;
+            }, eventId);
+
+            if (!clickSuccess) {
+                console.error(`[ErpService] Event with ID ${eventId} not found on calendar.`)
                 return false
             }
 
-            // Click event
-            await eventLocator.click({ force: true })
+            console.log('[ErpService] Event clicked. Waiting for modal...')
+            // 3. Wait for Quick Modal and Click "Modify" to go to Full Modal
+            // Robust Wait for Button
+            let modifyBtnFound = false
+            for (let i = 0; i < 5; i++) {
+                // Try finding the specific '회원정보 수정' button
+                const btn = page.locator("#CalenderModalEdit .modal-footer button:has-text('회원정보 수정')").first()
 
-            // Wait for modal and open member modify
-            let modalVisible = false
-            for (let attempt = 0; attempt < 3; attempt++) {
-                try {
-                    await page.waitForSelector('#modifyMemberModal', { state: 'visible', timeout: 2000 })
-                    modalVisible = true
+                // Also check generic 'Detail' or 'Edit' if text varies, but start specific
+                if (await btn.isVisible()) {
+                    await btn.click()
+                    modifyBtnFound = true
                     break
-                } catch (waitErr) {
-                    try {
-                        if (await page.locator('#CalenderModalEdit').isVisible()) {
-                            await page.evaluate(() => {
-                                // @ts-ignore
-                                if (typeof window.modMemberView === 'function') window.modMemberView()
-                            })
-                        }
-                    } catch (e) { }
-                    await page.waitForTimeout(500)
+                }
+                await page.waitForTimeout(500)
+            }
+
+            if (!modifyBtnFound) {
+                console.warn('[ErpService] Modify button not found via DOM. DIAGNOSTIC DUMP:')
+                // DUMP HTML of the footer to verify available buttons
+                const footerHtml = await page.evaluate(() => {
+                    return document.querySelector('#CalenderModalEdit .modal-footer')?.innerHTML || 'No Footer Found';
+                });
+                console.warn(`[ErpService] Footer HTML: ${footerHtml}`);
+
+                // Fallback: Use direct JS execution to show the modal if button is hidden/glitched
+                console.warn('[ErpService] Trying Direct JS Invoke...')
+
+                const jsClick = await page.evaluate(() => {
+                    // Try finding validation/modify button specifically by text content in JS
+                    const buttons = Array.from(document.querySelectorAll('#CalenderModalEdit .modal-footer button'));
+                    const target = buttons.find(b => b.textContent?.includes('수정') || b.textContent?.includes('Modify'));
+                    if (target) {
+                        (target as HTMLElement).click();
+                        return true;
+                    }
+                    return false;
+                })
+
+                if (!jsClick) {
+                    console.error('[ErpService] CRITICAL: "Modify Member" button could not be clicked.')
+                    // Cleanup
+                    await page.evaluate(() => {
+                        // @ts-ignore
+                        $('#CalenderModalEdit').modal('hide')
+                    })
+                    return false
                 }
             }
 
-            if (!modalVisible) {
-                console.error('[ErpService] Member modal not opening')
-                // Close any open modals
-                await page.evaluate(() => {
-                    // @ts-ignore
-                    $('.modal').modal('hide')
-                })
+
+            // 4. Wait for Full Modal (#modifyMemberModal)
+            try {
+                await page.waitForSelector('#modifyMemberModal', { state: 'visible', timeout: 5000 })
+                await page.waitForTimeout(1000) // Stabilization
+            } catch {
+                console.error('[ErpService] Member Modal did not appear')
                 return false
             }
 
             // Add Memo Logic
-            // 1. Click '+' button
+            // a. Click '+' button
             const plusBtn = page.locator('#modifyMemberModal .comment_btn .plus')
             if (await plusBtn.count() > 0) {
                 await plusBtn.click()
@@ -423,39 +445,49 @@ export class ErpService {
                 console.error('[ErpService] Plus button not found')
             }
 
-            // 2. Fill Date and Memo
-            const todayStr = new Date().toISOString().split('T')[0]
-
-            // Find the last inputs (newly added row)
-            const dateInputs = page.locator("#modifyMemberModal input[name='date[]']")
-            const commentInputs = page.locator("#modifyMemberModal input[name='comment[]']")
+            // b. Fill Date and Memo
+            const dateInputs = page.locator('#modifyMemberModal input[name="date[]"]')
+            const commentInputs = page.locator('#modifyMemberModal input[name="comment[]"]')
 
             if (await dateInputs.count() > 0) {
                 const lastDateInput = dateInputs.last()
                 const lastCommentInput = commentInputs.last()
 
-                // Robust Date Filling
+                // Robust Date Filling - Use Type instead of Fill to trigger standard events
                 await lastDateInput.click()
-                await lastDateInput.fill(todayStr)
-                await lastDateInput.press('Enter')
-                await lastDateInput.press('Tab')
+                await lastDateInput.clear() // Clear default if any
+                await page.waitForTimeout(100)
+                await lastDateInput.type(todayStr, { delay: 100 }) // Type slowly
+                await page.waitForTimeout(100)
+                await lastDateInput.press('Tab') // Commit value
+                await page.waitForTimeout(200)
 
-                // Explicitly dispatch events to ensure validation passes
-                await lastDateInput.evaluate((el) => {
-                    el.dispatchEvent(new Event('change', { bubbles: true }))
-                    el.dispatchEvent(new Event('blur', { bubbles: true }))
-                })
+                // Verify value stuck
+                const val = await lastDateInput.inputValue()
+                if (val !== todayStr) {
+                    console.warn(`[ErpService] value mismatch! wanted ${todayStr} got ${val}. Forcing value via eval...`)
+                    await lastDateInput.evaluate((el: HTMLInputElement, date: string) => {
+                        el.value = date
+                        // Trigger every possible event to satisfy jquery validation
+                        el.dispatchEvent(new Event('input', { bubbles: true }));
+                        el.dispatchEvent(new Event('change', { bubbles: true }));
+                        el.dispatchEvent(new Event('blur', { bubbles: true }));
+                        // JQuery trigger if available
+                        // @ts-ignore
+                        if (window.$) { window.$(el).trigger('change'); }
+                    }, todayStr)
+                }
 
-                await page.waitForTimeout(500)
+                await page.waitForTimeout(200)
 
-                // Robust Comment Filling
+                // Robust Comment Filling - Type as well
                 await lastCommentInput.click()
-                await lastCommentInput.fill(memo)
-                await lastCommentInput.press('Tab') // Ensure blur
+                await lastCommentInput.type(memo, { delay: 50 })
+            } else {
+                console.error('[ErpService] No inputs found for memo')
             }
 
-            // 3. Click Save
-            // Try finding '수정' or '저장' button
+            // c. Click Save
             const saveBtn = page.locator("#modifyMemberModal button:has-text('수정')").or(page.locator("#modifyMemberModal button:has-text('저장')")).first()
 
             if (await saveBtn.count() > 0) {
@@ -467,7 +499,7 @@ export class ErpService {
                 console.error('[ErpService] Save button not found')
             }
 
-            // Close modals
+            // Close modals cleanup
             await page.evaluate(() => {
                 // @ts-ignore
                 $('#modifyMemberModal').modal('hide')
@@ -477,28 +509,20 @@ export class ErpService {
                 $('.modal').modal('hide')
             })
             await page.waitForTimeout(500)
-
             return true
 
         } catch (e) {
-            console.error('[ErpService] Error in _updateMemoCore:', e)
-            // Cleanup
-            try {
-                await this.page?.evaluate(() => {
-                    // @ts-ignore
-                    $('.modal').modal('hide')
-                })
-            } catch { }
+            console.error(`[ErpService] Error in _updateMemoCore for ${eventId}:`, e)
             return false
         }
     }
 
-    // Updated updateMemo to use name and time for matching
-    async updateMemo(_id: string, memo: string, name?: string, time?: string): Promise<boolean> {
-        console.log(`[ErpService] updateMemo called for ${name} at ${time} with memo: ${memo}`)
+    // Updated updateMemo to use ID
+    async updateMemo(id: string, memo: string, name?: string, time?: string): Promise<boolean> {
+        console.log(`[ErpService] updateMemo called for ID ${id} with memo: ${memo}`)
 
-        if (!name || !time) {
-            console.error('[ErpService] Name or Time missing for updateMemo')
+        if (!id) {
+            console.error('[ErpService] ID missing for updateMemo')
             return false
         }
 
@@ -525,10 +549,10 @@ export class ErpService {
 
             // Ensure we are on calendar page
             if (!this.page.url().includes('/index/calender')) {
-                await this.page.goto('https://sook0517.cafe24.com/index/calender', { waitUntil: 'domcontentloaded' })
+                await this.page.goto('http://sook0517.cafe24.com/index/calender', { waitUntil: 'domcontentloaded' })
             }
 
-            const success = await this._updateMemoCore(name, time, memo)
+            const success = await this._updateMemoCore(id, memo)
 
             this.isBusy = false
             return success
@@ -540,7 +564,7 @@ export class ErpService {
         }
     }
 
-    async writeMemosBatch(memoList: { index: number; text: string; name: string; time: string }[]): Promise<Record<number, boolean>> {
+    async writeMemosBatch(memoList: { index: number; text: string; id: string; name: string; time: string }[]): Promise<Record<number, boolean>> {
         console.log(`[ErpService] writeMemosBatch called with ${memoList.length} items`)
         const results: Record<number, boolean> = {}
 
@@ -567,13 +591,13 @@ export class ErpService {
 
             // 2. Ensure Calendar ONCE
             if (!this.page.url().includes('/index/calender')) {
-                await this.page.goto('https://sook0517.cafe24.com/index/calender', { waitUntil: 'domcontentloaded' })
+                await this.page.goto('http://sook0517.cafe24.com/index/calender', { waitUntil: 'domcontentloaded' })
             }
 
             // 3. Loop
             for (const item of memoList) {
-                console.log(`[ErpService] Batch processing: ${item.name} (${item.time})`)
-                const success = await this._updateMemoCore(item.name, item.time, item.text)
+                console.log(`[ErpService] Batch processing: ${item.name} (${item.id})`)
+                const success = await this._updateMemoCore(item.id, item.text)
                 results[item.index] = success
 
                 if (!success) {
@@ -605,7 +629,421 @@ export class ErpService {
         return []
     }
 
-    async createReservation(_data: any): Promise<boolean> {
-        return true
+    private async _modifyHistoryCore(eventId: string, targetHistory: { date: string, content: string }, action: 'delete' | 'update', newHistory?: { date: string, content: string }): Promise<boolean> {
+        console.log(`[ErpService] _modifyHistoryCore: ${action} for ID ${eventId}`)
+        if (!this.page) return false
+        const page = this.page
+
+        try {
+            // Ensure we are on the correct date (Today)
+            const todayStr = new Date(new Date().getTime() + (9 * 60 * 60 * 1000)).toISOString().split('T')[0];
+            console.log(`[ErpService] Navigating calendar to ${todayStr}...`)
+
+            await page.evaluate((date) => {
+                // @ts-ignore
+                $('#calendar').fullCalendar('gotoDate', date);
+            }, todayStr);
+
+            console.log(`[ErpService] Waiting for events to load...`)
+            try {
+                await page.waitForSelector('.fc-event', { state: 'visible', timeout: 5000 })
+            } catch (e) {
+                console.error('[ErpService] Timeout waiting for .fc-event')
+                return false
+            }
+
+            // Find event by ID using page.evaluate (Robust)
+            const foundEvent = await page.evaluate((targetId) => {
+                // @ts-ignore
+                const $ = window.$;
+                let match = false;
+                $('.fc-event').each((i: number, el: HTMLElement) => {
+                    if (match) return; // already found
+                    const fcData = $(el).data('fcSeg');
+                    if (fcData && String(fcData.event.id) === String(targetId)) {
+                        $(el).click(); // Click immediately from inside browser context
+                        match = true;
+                    }
+                });
+                return match;
+            }, eventId);
+
+            if (!foundEvent) {
+                console.error(`[ErpService] Event with ID ${eventId} not found on calendar.`);
+                return false;
+            }
+
+            console.log(`[ErpService] Event clicked. Waiting for modal...`)
+
+            // 1. Wait for Quick Edit Modal (#CalenderModalEdit)
+            try {
+                await page.waitForSelector('#CalenderModalEdit', { state: 'visible', timeout: 3000 })
+            } catch {
+                console.warn('[ErpService] Quick Edit Modal did not appear, checking if Modify Modal is already open...')
+            }
+
+            // 2. Click "Modify Member" ('회원정보 수정')
+            const modifyBtn = page.locator("#CalenderModalEdit button:has-text('회원정보 수정')")
+            if (await modifyBtn.count() > 0 && await modifyBtn.isVisible()) {
+                await modifyBtn.click()
+            } else {
+                if (await page.locator('#modifyMemberModal').count() === 0) {
+                    console.error('[ErpService] "Modify Member" button not found and Modify Modal not open.')
+                    return false;
+                }
+            }
+
+            // 3. Wait for History Modal
+            await page.waitForSelector('#modifyMemberModal', { state: 'visible', timeout: 5000 })
+            await page.waitForTimeout(500)
+
+            // NEW STRATEGY: Iterate inputs matching name='date[]' directly
+            // The HTML dump proves these are the specific inputs for Education/Memo
+            const dateInputs = page.locator('#modifyMemberModal input[name="date[]"]')
+            const contentInputs = page.locator('#modifyMemberModal input[name="comment[]"]')
+
+            const count = await dateInputs.count()
+            console.log(`[ErpService] Found ${count} history date inputs (name="date[]").`)
+
+            if (count === 0) {
+                console.error('[ErpService] No history inputs found.');
+                return false;
+            }
+
+            let foundIndex = -1
+
+            for (let i = 0; i < count; i++) {
+                const dateVal = (await dateInputs.nth(i).inputValue()).trim()
+                const contentVal = (await contentInputs.nth(i).inputValue()).trim()
+
+                console.log(`[ErpService] History Item ${i}: "${dateVal}" | "${contentVal}"`)
+
+                if (dateVal === targetHistory.date.trim() && contentVal === targetHistory.content.trim()) {
+                    foundIndex = i
+                    break
+                }
+            }
+
+            if (foundIndex === -1) {
+                console.error('[ErpService] Target history not found')
+                await page.evaluate(() => {
+                    // @ts-ignore
+                    $('.modal').modal('hide')
+                })
+                return false
+            }
+
+            console.log(`[ErpService] Target found at index ${foundIndex}`)
+
+            const targetDateInput = dateInputs.nth(foundIndex)
+            // Use XPath to find the parent row regardless of its class
+            const targetRow = targetDateInput.locator('xpath=..')
+
+            if (action === 'delete') {
+                const minusBtn = targetRow.locator('.minus')
+                if (await minusBtn.count() > 0) {
+                    console.log('[ErpService] Delete: clicking minus button and accepting dialog...');
+                    page.once('dialog', async dialog => {
+                        console.log(`[ErpService] Dialog detected: ${dialog.message()}`);
+                        await dialog.accept();
+                    });
+                    await minusBtn.click()
+                } else {
+                    console.warn('[ErpService] No minus button, clearing text inputs')
+                    await targetDateInput.fill('')
+                    await contentInputs.nth(foundIndex).fill('')
+                }
+            } else if (action === 'update' && newHistory) {
+                await targetDateInput.fill(newHistory.date)
+                await contentInputs.nth(foundIndex).fill(newHistory.content)
+            }
+
+            // Click Save
+            const saveBtn = page.locator("#modifyMemberModal button:has-text('수정')").or(page.locator("#modifyMemberModal button:has-text('저장')")).first()
+
+            if (await saveBtn.count() > 0) {
+                page.once('dialog', dialog => dialog.accept())
+                await saveBtn.click()
+                await page.waitForTimeout(1000)
+            } else {
+                console.error('[ErpService] Save button not found')
+                await page.evaluate(() => {
+                    // @ts-ignore
+                    $('.modal').modal('hide')
+                })
+                return false
+            }
+
+            // Close modals
+            await page.evaluate(() => {
+                // @ts-ignore
+                $('#modifyMemberModal').modal('hide')
+                // @ts-ignore
+                $('#CalenderModalEdit').modal('hide')
+                // @ts-ignore
+                $('.modal').modal('hide')
+            })
+            await page.waitForTimeout(500)
+            return true
+
+        } catch (e) {
+            console.error('[ErpService] Error in _modifyHistoryCore:', e)
+            try {
+                await this.page?.evaluate(() => {
+                    // @ts-ignore
+                    $('.modal').modal('hide')
+                })
+            } catch { }
+            return false
+        }
+    }
+
+    async deleteHistory(eventId: string, history: { date: string, content: string }): Promise<boolean> {
+        return this.wrapErpOperation(eventId, (id) => this._modifyHistoryCore(id, history, 'delete'))
+    }
+
+    async updateHistory(eventId: string, oldHistory: { date: string, content: string }, newHistory: { date: string, content: string }): Promise<boolean> {
+        return this.wrapErpOperation(eventId, (id) => this._modifyHistoryCore(id, oldHistory, 'update', newHistory))
+    }
+
+    // Helper wrapper for login/nav boilerplate
+    private async wrapErpOperation(eventId: string, operation: (id: string) => Promise<boolean>): Promise<boolean> {
+        if (this.isBusy) {
+            console.warn('[ErpService] Service is busy')
+            return false
+        }
+        this.isBusy = true
+
+        try {
+            await this.start()
+            if (!this.page) {
+                this.isBusy = false
+                return false
+            }
+
+            const loginSuccess = await this.login('dobong', '1010')
+            if (!loginSuccess) {
+                this.isBusy = false
+                return false
+            }
+
+            if (!this.page.url().includes('/index/calender')) {
+                await this.page.goto('http://sook0517.cafe24.com/index/calender', { waitUntil: 'domcontentloaded' })
+            }
+
+            const success = await operation(eventId)
+
+            this.isBusy = false
+            return success
+        } catch (e) {
+            console.error('[ErpService] wrapper error:', e)
+            this.isBusy = false
+            return false
+        }
+    }
+
+    async createReservation(data: any): Promise<boolean> {
+        console.log(`[ErpService] createReservation called for ${data.name}`)
+
+        let seatId = data.seat_id;
+
+        // Fallback Seat Logic (Ported from Python)
+        if (!seatId) {
+            const product = data.product || '';
+            const request = data.request || '';
+
+            if (product.includes('상담') && !request.includes('리뷰노트')) {
+                seatId = 'dobong-9';
+            } else if (request.includes('리뷰노트') || product.includes('체험권')) {
+                seatId = 'dobong-1';
+            } else {
+                seatId = 'dobong-1';
+            }
+            console.log(`[ErpService] Seat ID inferred: ${seatId}`);
+        }
+
+        try {
+            await this.start()
+            if (!this.page) return false
+            const page = this.page
+
+            // 1. Ensure Calendar Page
+            if (!page.url().includes('/index/calender')) {
+                await page.goto('http://sook0517.cafe24.com/index/calender', { waitUntil: 'domcontentloaded' })
+            }
+
+            // 2. Open Modal
+            await page.evaluate((date) => {
+                // @ts-ignore
+                $('#calendar').fullCalendar('gotoDate', date);
+                // @ts-ignore
+                $('#calendar').fullCalendar('changeView', 'agendaDay');
+            }, data.date);
+
+            await page.waitForTimeout(1000)
+
+            // Click Add Button
+            try {
+                // Try button click
+                const clicked = await page.evaluate(() => {
+                    const btn = document.querySelector('button.add_cal_btn');
+                    if (btn) { (btn as HTMLElement).click(); return true; }
+                    return false;
+                });
+                if (!clicked) {
+                    await page.click("button:has-text('일정 추가')", { timeout: 2000 });
+                }
+            } catch (e) {
+                console.warn('[ErpService] Add button click failed, trying JS modal show');
+                await page.evaluate(() => {
+                    // @ts-ignore
+                    $('#CalenderModalNew').modal('show');
+                });
+            }
+
+            const modalSelector = '#CalenderModalNew';
+            await page.waitForSelector(modalSelector, { state: 'visible', timeout: 5000 });
+
+            // 3. Fill Date (Robust Datepicker handling)
+            await page.evaluate((date) => {
+                // @ts-ignore
+                $('#insDate').val(date);
+                try {
+                    // @ts-ignore
+                    $('#insDate').datepicker('destroy');
+                } catch (e) { }
+
+                // @ts-ignore
+                $('#insDate').trigger('change');
+            }, data.date);
+
+            await page.waitForTimeout(500);
+
+            // 4. Time
+            const [sH, sM] = data.start_time.split(':');
+            const [eH, eM] = data.end_time.split(':');
+
+            await page.selectOption(`${modalSelector} #insStime`, sH);
+            await page.selectOption(`${modalSelector} #insStime_min`, sM);
+            await page.selectOption(`${modalSelector} #insEtime`, eH);
+            await page.selectOption(`${modalSelector} #insEtime_min`, eM);
+
+            await page.waitForTimeout(500); // Wait for device list refresh via AJAX
+
+            // 5. Member Info (Direct Join)
+            try {
+                // Click 'Direct Join' radio (class type_member_b)
+                await page.click(`${modalSelector} input.type_member_b`);
+            } catch (e) { console.warn('Radio click failed'); }
+
+            await page.fill(`${modalSelector} #member_ins_name`, data.name);
+            if (data.phone) {
+                await page.fill(`${modalSelector} #insPhone`, data.phone);
+            }
+
+            // Birthdate dummy
+            try {
+                await page.selectOption(`${modalSelector} .birth_year`, "2000");
+                await page.selectOption(`${modalSelector} .birth_month`, "01");
+                await page.selectOption(`${modalSelector} .birth_day`, "01");
+            } catch (e) { }
+
+            // 6. Product Selection
+            let goodsVal = "6268"; // Default
+            const pText = (data.product || '').replace(/\s/g, '');
+            const oText = (data.option || '').replace(/\s/g, '');
+
+            if (pText.includes('1시간') || pText.includes('체험권')) {
+                if (oText.includes('1종자동')) goodsVal = "6272";
+                else goodsVal = "6268";
+            } else if (pText.includes('2종시간제')) {
+                if (oText.includes('6시간')) goodsVal = "6269";
+                else if (oText.includes('12시간')) goodsVal = "6270";
+                else if (oText.includes('24시간')) goodsVal = "6271";
+            }
+
+            try {
+                // Name 'goods_idx'
+                await page.selectOption('select[name="goods_idx"]', goodsVal);
+            } catch (e) {
+                // Fallback
+                try { await page.selectOption('select[name="goods_idx"]', { index: 1 }); } catch (e) { }
+            }
+
+            // 7. Payment (Naver Pay = 12)
+            try {
+                await page.selectOption(`${modalSelector} .payment_select`, "12");
+            } catch (e) { }
+
+            // 8. Seat Selection (Retry Logic)
+            console.log(`[ErpService] Selecting seat: ${seatId}`);
+            let seatSelected = false;
+
+            for (let i = 0; i < 5; i++) {
+                // Evaluate available options
+                const options = await page.evaluate((selector) => {
+                    // @ts-ignore
+                    const sel = $(`${selector} select#insMachine`);
+                    const opts: any[] = [];
+                    // @ts-ignore
+                    sel.find('option').each(function () {
+                        // @ts-ignore
+                        opts.push({ text: $(this).text(), value: $(this).val() });
+                    });
+                    return opts;
+                }, modalSelector);
+
+                let targetVal = null;
+                // Exact match
+                const exact = options.find((o: any) => o.text === seatId);
+                if (exact) targetVal = exact.value;
+
+                // Partial match
+                if (!targetVal) {
+                    const partial = options.find((o: any) => o.text.includes(seatId));
+                    if (partial) targetVal = partial.value;
+                }
+
+                // Number match (e.g. '1' for 'dobong-1')
+                if (!targetVal && seatId.includes('-')) {
+                    const num = seatId.split('-')[1];
+                    const numMatch = options.find((o: any) => o.text.endsWith('-' + num));
+                    if (numMatch) targetVal = numMatch.value;
+                }
+
+                if (targetVal) {
+                    await page.evaluate((val) => {
+                        // @ts-ignore
+                        $('#CalenderModalNew select#insMachine').val(val).trigger('change');
+                    }, targetVal);
+                    seatSelected = true;
+                    break;
+                }
+
+                await page.waitForTimeout(500);
+            }
+
+            if (!seatSelected) {
+                console.error(`[ErpService] Could not find seat option for ${seatId}`);
+                // Proceed anyway? Or fail? The python code retry loop implies we really want it.
+            }
+
+            // 9. Submit
+            await page.click(`${modalSelector} button.antosubmit`);
+            await page.waitForSelector(modalSelector, { state: 'hidden', timeout: 5000 });
+
+            return true;
+
+        } catch (e) {
+            console.error('[ErpService] Create Reservation failed:', e);
+            // Cleanup: try to close modal
+            try {
+                await this.page?.evaluate(() => {
+                    // @ts-ignore
+                    $('.modal').modal('hide');
+                });
+            } catch { }
+            return false;
+        }
     }
 }

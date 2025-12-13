@@ -26,10 +26,19 @@ electron.contextBridge.exposeInMainWorld("api", {
     getTodayEducation: () => electron.ipcRenderer.invoke("erp:getTodayEducation"),
     getStudentDetail: (id) => electron.ipcRenderer.invoke("erp:getStudentDetail", { id }),
     updateMemo: (id, memo, name, time) => electron.ipcRenderer.invoke("erp:updateMemo", { id, memo, name, time }),
-    writeMemosBatch: (memoList) => electron.ipcRenderer.invoke("erp:writeMemosBatch", { memoList })
+    writeMemosBatch: (memoList) => electron.ipcRenderer.invoke("erp:writeMemosBatch", { memoList }),
+    deleteHistory: (id, history) => electron.ipcRenderer.invoke("erp:deleteHistory", { id, history }),
+    updateHistory: (id, oldHistory, newHistory) => electron.ipcRenderer.invoke("erp:updateHistory", { id, oldHistory, newHistory }),
+    setHeadless: (headless) => electron.ipcRenderer.invoke("erp:setHeadless", { headless })
   },
   scraper: {
     naverLogin: () => electron.ipcRenderer.invoke("scraper:naverLogin"),
-    getNaverReservations: () => electron.ipcRenderer.invoke("scraper:getNaverReservations")
+    kakaoLogin: () => electron.ipcRenderer.invoke("scraper:kakaoLogin"),
+    getNaverBookings: () => electron.ipcRenderer.invoke("scraper:getNaverBookings"),
+    getKakaoBookings: () => electron.ipcRenderer.invoke("scraper:getKakaoBookings")
+  },
+  settings: {
+    saveCredentials: (creds) => electron.ipcRenderer.invoke("settings:saveCredentials", creds),
+    getCredentials: () => electron.ipcRenderer.invoke("settings:getCredentials")
   }
 });

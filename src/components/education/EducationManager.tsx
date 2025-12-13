@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react'
 import { cn } from '../../lib/utils'
-import { RefreshCw, Save, Square, Send } from 'lucide-react'
+import { RefreshCw, Save, Square, Send, Pencil, Trash2, X, Check } from 'lucide-react'
 
 interface Student {
     id: string
     name: string
+    domIdentifier?: string
     time: string
     duration: number
     status: 'pending' | 'done'
@@ -14,14 +15,31 @@ interface Student {
     index: number
 }
 
+
+function hasTodayEducation(student: Student): boolean {
+    if (!student.history || student.history.length === 0) return false
+    const d = new Date()
+    const year = d.getFullYear()
+    const month = String(d.getMonth() + 1).padStart(2, '0')
+    const day = String(d.getDate()).padStart(2, '0')
+    const today = `${year}-${month}-${day}`
+    return student.history.some(h => h.date === today)
+}
+
 export function EducationManager() {
     const [students, setStudents] = useState<Student[]>([])
     const [selectedId, setSelectedId] = useState<string | null>(null)
     const [operationTime, setOperationTime] = useState('')
     const [loading, setLoading] = useState(false)
     const [drafts, setDrafts] = useState<Record<string, string>>({})
-    const [showBrowser, setShowBrowser] = useState(false)
+    const [showBrowser, setShowBrowser] = useState(true)
     const [isLoggedIn, setIsLoggedIn] = useState(false)
+    const [editingHistory, setEditingHistory] = useState<{ index: number; date: string; content: string } | null>(null)
+
+    // Sync browser visibility with backend
+    useEffect(() => {
+        window.api.erp.setHeadless(!showBrowser)
+    }, [showBrowser])
 
     const selectedStudent = students.find(s => s.id === selectedId)
 
@@ -101,11 +119,11 @@ export function EducationManager() {
             .map((s) => {
                 const text = drafts[s.id]
                 if (text && text.trim() && text.trim() !== `${s.duration}/`) {
-                    return { index: s.index, text: text.trim(), name: s.name, time: s.time }
+                    return { index: s.index, text: text.trim(), id: s.id, name: s.name, time: s.time }
                 }
                 return null
             })
-            .filter((item): item is { index: number; text: string; name: string; time: string } => item !== null)
+            .filter((item): item is { index: number; text: string; id: string; name: string; time: string } => item !== null)
 
         if (memoList.length === 0) {
             alert('전송할 내용이 없습니다.')
@@ -142,6 +160,50 @@ export function EducationManager() {
     const handleDraftChange = (text: string) => {
         if (!selectedId) return
         setDrafts(prev => ({ ...prev, [selectedId]: text }))
+    }
+
+    const handleDeleteHistory = async (historyItem: { date: string, content: string }) => {
+        if (!selectedStudent || !confirm('정말 삭제하시겠습니까?')) return
+        setLoading(true)
+        try {
+            // Use ID for robust matching
+            const success = await window.api.erp.deleteHistory(selectedStudent.id, historyItem)
+            if (success) {
+                alert('삭제되었습니다.')
+                fetchData() // Refresh to sync
+            } else {
+                alert('삭제 실패')
+            }
+        } catch (e) {
+            console.error(e)
+            alert('오류 발생')
+        } finally {
+            setLoading(false)
+        }
+    }
+
+    const handleUpdateHistory = async () => {
+        if (!selectedStudent || !editingHistory) return
+        setLoading(true)
+        try {
+            const oldItem = selectedStudent.history![editingHistory.index]
+            const newItem = { date: editingHistory.date, content: editingHistory.content }
+
+            const success = await window.api.erp.updateHistory(selectedStudent.id, oldItem, newItem)
+
+            if (success) {
+                alert('수정되었습니다.')
+                setEditingHistory(null)
+                fetchData() // Refresh
+            } else {
+                alert('수정 실패')
+            }
+        } catch (e) {
+            console.error(e)
+            alert('오류 발생')
+        } finally {
+            setLoading(false)
+        }
     }
 
     // Auto-prefix effect when selecting student
@@ -204,7 +266,7 @@ export function EducationManager() {
                                     <div className="flex items-center space-x-3">
                                         <div className={cn(
                                             "w-3 h-3 rounded-full",
-                                            student.status === 'done' ? "bg-green-500" : "bg-yellow-500"
+                                            (student.status === 'done' || hasTodayEducation(student)) ? "bg-green-500" : "bg-yellow-500"
                                         )} />
                                         <span className="font-medium text-gray-900">{student.name}</span>
                                     </div>
@@ -236,11 +298,11 @@ export function EducationManager() {
                                     </div>
                                     <div className={cn(
                                         "px-3 py-1 rounded-full text-sm font-medium",
-                                        selectedStudent.status === 'done'
+                                        (selectedStudent.status === 'done' || hasTodayEducation(selectedStudent))
                                             ? "bg-green-100 text-green-800"
                                             : "bg-yellow-100 text-yellow-800"
                                     )}>
-                                        {selectedStudent.status === 'done' ? '완료' : '대기'}
+                                        {(selectedStudent.status === 'done' || hasTodayEducation(selectedStudent)) ? '완료' : '대기'}
                                     </div>
                                 </div>
 
@@ -258,9 +320,58 @@ export function EducationManager() {
                                 {selectedStudent.history && selectedStudent.history.length > 0 ? (
                                     <div className="space-y-3">
                                         {selectedStudent.history.map((h, i) => (
-                                            <div key={i} className="bg-white p-4 rounded-lg shadow-sm">
-                                                <div className="text-sm text-gray-500 mb-1">{h.date}</div>
-                                                <div className="text-gray-800">{h.content}</div>
+                                            <div key={i} className="bg-white p-4 rounded-lg shadow-sm border border-gray-100 group">
+                                                {editingHistory?.index === i ? (
+                                                    <div className="space-y-2">
+                                                        <input
+                                                            type="text"
+                                                            value={editingHistory.date}
+                                                            onChange={e => setEditingHistory({ ...editingHistory, date: e.target.value })}
+                                                            className="w-full text-sm border rounded px-2 py-1"
+                                                        />
+                                                        <input
+                                                            type="text"
+                                                            value={editingHistory.content}
+                                                            onChange={e => setEditingHistory({ ...editingHistory, content: e.target.value })}
+                                                            className="w-full border rounded px-2 py-1"
+                                                        />
+                                                        <div className="flex justify-end space-x-2 mt-2">
+                                                            <button
+                                                                onClick={() => setEditingHistory(null)}
+                                                                className="p-1 text-gray-500 hover:bg-gray-100 rounded"
+                                                            >
+                                                                <X size={16} />
+                                                            </button>
+                                                            <button
+                                                                onClick={handleUpdateHistory}
+                                                                className="p-1 text-green-600 hover:bg-green-50 rounded"
+                                                            >
+                                                                <Check size={16} />
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                ) : (
+                                                    <div className="flex justify-between items-start">
+                                                        <div>
+                                                            <div className="text-sm text-gray-500 mb-1">{h.date}</div>
+                                                            <div className="text-gray-800">{h.content}</div>
+                                                        </div>
+                                                        <div className="flex space-x-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                                                            <button
+                                                                onClick={() => setEditingHistory({ index: i, date: h.date, content: h.content })}
+                                                                className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded"
+                                                            >
+                                                                <Pencil size={14} />
+                                                            </button>
+                                                            <button
+                                                                onClick={() => handleDeleteHistory(h)}
+                                                                className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"
+                                                            >
+                                                                <Trash2 size={14} />
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                )}
                                             </div>
                                         ))}
                                     </div>
