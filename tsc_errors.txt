@@ -1,0 +1,28 @@
+electron/main.ts(1,30): error TS6133: 'ipcMain' is declared but its value is never read.
+electron/main.ts(14,7): error TS6133: 'erpService' is declared but its value is never read.
+electron/main.ts(15,7): error TS6133: 'scraperService' is declared but its value is never read.
+electron/main.ts(19,25): error TS2345: Argument of type 'string | undefined' is not assignable to parameter of type 'string'.
+  Type 'undefined' is not assignable to type 'string'.
+electron/main.ts(36,32): error TS2345: Argument of type 'string | undefined' is not assignable to parameter of type 'string'.
+  Type 'undefined' is not assignable to type 'string'.
+electron/services/availability.ts(1,20): error TS6133: 'isWithinInterval' is declared but its value is never read.
+electron/services/availability.ts(6,5): error TS6133: 'existingEvents' is declared but its value is never read.
+electron/services/availability.ts(10,11): error TS6133: 'end' is declared but its value is never read.
+electron/services/erpService.ts(189,21): error TS6133: 'photo' is declared but its value is never read.
+electron/services/erpService.ts(314,21): error TS2353: Object literal may only specify known properties, and 'index' does not exist in type 'Student'.
+electron/services/erpService.ts(329,28): error TS6133: 'eventId' is declared but its value is never read.
+electron/services/erpService.ts(549,29): error TS6133: 'weeks' is declared but its value is never read.
+electron/services/erpService.ts(582,29): error TS6133: 'data' is declared but its value is never read.
+electron/services/scraperService.ts(2,10): error TS6133: 'chromium' is declared but its value is never read.
+electron/services/scraperService.ts(2,29): error TS6133: 'Page' is declared but its value is never read.
+electron/services/scraperService.ts(5,13): error TS6133: 'browser' is declared but its value is never read.
+src/App.tsx(1,8): error TS6133: 'React' is declared but its value is never read.
+src/components/dashboard/Dashboard.tsx(1,1): error TS6133: 'React' is declared but its value is never read.
+src/components/education/EducationManager.tsx(1,8): error TS6133: 'React' is declared but its value is never read.
+src/components/education/EducationManager.tsx(3,27): error TS6133: 'Trash2' is declared but its value is never read.
+src/components/education/EducationManager.tsx(3,35): error TS6133: 'CheckSquare' is declared but its value is never read.
+src/components/education/EducationManager.tsx(128,13): error TS6133: 'newText' is declared but its value is never read.
+src/components/layout/Sidebar.tsx(1,1): error TS6133: 'React' is declared but its value is never read.
+src/components/ReservationCollector.tsx(1,8): error TS6133: 'React' is declared but its value is never read.
+src/components/ReservationCollector.tsx(2,1): error TS6133: 'cn' is declared but its value is never read.
+src/components/ReservationCollector.tsx(2,20): error TS2307: Cannot find module '../../lib/utils' or its corresponding type declarations.

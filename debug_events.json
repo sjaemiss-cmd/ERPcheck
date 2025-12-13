@@ -1,0 +1,517 @@
+[
+  {
+    "text": "09:00\n운영",
+    "html": "<a class=\"fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_blue device4\" style=\"inset: 119.5px auto -839.5px 33.3333%; z-index: 1; width: 11.1111%;\"><div class=\"fc-content\"><div class=\"fc-time\" data-start=\"09:00\" data-full=\"9:00 AM\"><span>09:00</span></div><div class=\"fc-title\">운영 <p class=\"text_red\"></p></div></div><div class=\"fc-bg\"></div></a>",
+    "classes": "fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_blue device4"
+  },
+  {
+    "text": "10:00\n안세연.2종합무",
+    "html": "<a class=\"fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device1\" style=\"inset: 179.5px auto -299.5px 0%; z-index: 2; width: 11.1111%;\"><div class=\"fc-content\"><div class=\"fc-time\" data-start=\"10:00\" data-full=\"10:00 AM\"><span>10:00</span></div><div class=\"fc-title\">안세연.2종합무 <p class=\"text_red\"></p></div></div><div class=\"fc-bg\"></div></a>",
+    "classes": "fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device1"
+  },
+  {
+    "text": "10:30\n박연우2종합무",
+    "html": "<a class=\"fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device2\" style=\"inset: 209.5px auto -329.5px 11.1111%; z-index: 3; width: 11.1111%;\"><div class=\"fc-content\"><div class=\"fc-time\" data-start=\"10:30\" data-full=\"10:30 AM\"><span>10:30</span></div><div class=\"fc-title\">박연우2종합무 <p class=\"text_red\"></p></div></div><div class=\"fc-bg\"></div></a>",
+    "classes": "fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device2"
+  },
+  {
+    "text": "12:00\n남우석2종합무",
+    "html": "<a class=\"fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device3\" style=\"inset: 299.5px auto -419.5px 22.2222%; z-index: 2; width: 11.1111%;\"><div class=\"fc-content\"><div class=\"fc-time\" data-start=\"12:00\" data-full=\"12:00 PM\"><span>12:00</span></div><div class=\"fc-title\">남우석2종합무 <p class=\"text_red\"></p></div></div><div class=\"fc-bg\"></div></a>",
+    "classes": "fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device3"
+  },
+  {
+    "text": "12:30\n시간제\n\n[시간제]",
+    "html": "<a class=\"fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_yellow device5\" style=\"inset: 329.5px auto -389.5px 44.4444%; z-index: 3; width: 11.1111%;\"><div class=\"fc-content\"><div class=\"fc-time\" data-start=\"12:30\" data-full=\"12:30 PM\"><span>12:30</span></div><div class=\"fc-title\">시간제 <p class=\"text_red\">[시간제]</p></div></div><div class=\"fc-bg\"></div></a>",
+    "classes": "fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_yellow device5"
+  },
+  {
+    "text": "13:00\n이희상.2종합무",
+    "html": "<a class=\"fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device2\" style=\"inset: 359.5px auto -539.5px 11.1111%; z-index: 4; width: 11.1111%;\"><div class=\"fc-content\"><div class=\"fc-time\" data-start=\"13:00\" data-full=\"1:00 PM\"><span>13:00</span></div><div class=\"fc-title\">이희상.2종합무 <p class=\"text_red\"></p></div></div><div class=\"fc-bg\"></div></a>",
+    "classes": "fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device2"
+  },
+  {
+    "text": "14:00\n박현주.2종합무",
+    "html": "<a class=\"fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device3\" style=\"inset: 419.5px auto -539.5px 22.2222%; z-index: 2; width: 11.1111%;\"><div class=\"fc-content\"><div class=\"fc-time\" data-start=\"14:00\" data-full=\"2:00 PM\"><span>14:00</span></div><div class=\"fc-title\">박현주.2종합무 <p class=\"text_red\"></p></div></div><div class=\"fc-bg\"></div></a>",
+    "classes": "fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device3"
+  },
+  {
+    "text": "14:00\n윤지호2종합무",
+    "html": "<a class=\"fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device7\" style=\"inset: 419.5px auto -539.5px 66.6667%; z-index: 3; width: 11.1111%;\"><div class=\"fc-content\"><div class=\"fc-time\" data-start=\"14:00\" data-full=\"2:00 PM\"><span>14:00</span></div><div class=\"fc-title\">윤지호2종합무 <p class=\"text_red\"></p></div></div><div class=\"fc-bg\"></div></a>",
+    "classes": "fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device7"
+  },
+  {
+    "text": "14:00\n시간제\n\n[시간제]",
+    "html": "<a class=\"fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_yellow device5 bd_red\" style=\"inset: 419.5px auto -479.5px 44.4444%; z-index: 5; width: 11.1111%;\"><div class=\"fc-content\"><div class=\"fc-time\" data-start=\"14:00\" data-full=\"2:00 PM\"><span>14:00</span></div><div class=\"fc-title\">시간제 <p class=\"text_red\">[시간제]</p></div></div><div class=\"fc-bg\"></div></a>",
+    "classes": "fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_yellow device5 bd_red"
+  },
+  {
+    "text": "14:30\n시간제\n\n[시간제]",
+    "html": "<a class=\"fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_yellow device6\" style=\"inset: 449.5px auto -509.5px 55.5556%; z-index: 6; width: 11.1111%;\"><div class=\"fc-content\"><div class=\"fc-time\" data-start=\"14:30\" data-full=\"2:30 PM\"><span>14:30</span></div><div class=\"fc-title\">시간제 <p class=\"text_red\">[시간제]</p></div></div><div class=\"fc-bg\"></div></a>",
+    "classes": "fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_yellow device6"
+  },
+  {
+    "text": "15:00\n김문자/리뷰노트",
+    "html": "<a class=\"fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_blue device1\" style=\"inset: 479.5px auto -539.5px 0%; z-index: 5; width: 11.1111%;\"><div class=\"fc-content\"><div class=\"fc-time\" data-start=\"15:00\" data-full=\"3:00 PM\"><span>15:00</span></div><div class=\"fc-title\">김문자/리뷰노트 <p class=\"text_red\"></p></div></div><div class=\"fc-bg\"></div></a>",
+    "classes": "fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_blue device1"
+  },
+  {
+    "text": "15:30\n장하은/리뷰",
+    "html": "<a class=\"fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_blue device5 bd_red\" style=\"inset: 509.5px auto -569.5px 44.4444%; z-index: 6; width: 11.1111%;\"><div class=\"fc-content\"><div class=\"fc-time\" data-start=\"15:30\" data-full=\"3:30 PM\"><span>15:30</span></div><div class=\"fc-title\">장하은/리뷰 <p class=\"text_red\"></p></div></div><div class=\"fc-bg\"></div></a>",
+    "classes": "fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_blue device5 bd_red"
+  },
+  {
+    "text": "16:00\n윤태건2종합무",
+    "html": "<a class=\"fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device2\" style=\"inset: 539.5px auto -659.5px 11.1111%; z-index: 2; width: 11.1111%;\"><div class=\"fc-content\"><div class=\"fc-time\" data-start=\"16:00\" data-full=\"4:00 PM\"><span>16:00</span></div><div class=\"fc-title\">윤태건2종합무 <p class=\"text_red\"></p></div></div><div class=\"fc-bg\"></div></a>",
+    "classes": "fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device2"
+  },
+  {
+    "text": "17:00\n서지현.도로합무",
+    "html": "<a class=\"fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device3\" style=\"inset: 599.5px auto -689.5px 22.2222%; z-index: 3; width: 11.1111%;\"><div class=\"fc-content\"><div class=\"fc-time\" data-start=\"17:00\" data-full=\"5:00 PM\"><span>17:00</span></div><div class=\"fc-title\">서지현.도로합무 <p class=\"text_red\"></p></div></div><div class=\"fc-bg\"></div></a>",
+    "classes": "fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device3"
+  },
+  {
+    "text": "17:00\n오한/리뷰노트",
+    "html": "<a class=\"fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_gray device5 bd_red\" style=\"inset: 599.5px auto -659.5px 44.4444%; z-index: 4; width: 11.1111%;\"><div class=\"fc-content\"><div class=\"fc-time\" data-start=\"17:00\" data-full=\"5:00 PM\"><span>17:00</span></div><div class=\"fc-title\">오한/리뷰노트 <p class=\"text_red\"></p></div></div><div class=\"fc-bg\"></div></a>",
+    "classes": "fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_gray device5 bd_red"
+  },
+  {
+    "text": "18:00\n아리야2종합무\n\n[미납]",
+    "html": "<a class=\"fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_gray device1\" style=\"inset: 659.5px auto -719.5px 0%; z-index: 2; width: 11.1111%;\"><div class=\"fc-content\"><div class=\"fc-time\" data-start=\"18:00\" data-full=\"6:00 PM\"><span>18:00</span></div><div class=\"fc-title\">아리야2종합무 <p class=\"text_red\">[미납]</p></div></div><div class=\"fc-bg\"></div></a>",
+    "classes": "fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_gray device1"
+  },
+  {
+    "text": "19:00\n유찬석2종합무",
+    "html": "<a class=\"fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device1\" style=\"inset: 719.5px auto -839.5px 0%; z-index: 2; width: 11.1111%;\"><div class=\"fc-content\"><div class=\"fc-time\" data-start=\"19:00\" data-full=\"7:00 PM\"><span>19:00</span></div><div class=\"fc-title\">유찬석2종합무 <p class=\"text_red\"></p></div></div><div class=\"fc-bg\"></div></a>",
+    "classes": "fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device1"
+  },
+  {
+    "text": "19:30\n조소영.2종합무",
+    "html": "<a class=\"fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device2\" style=\"inset: 749.5px auto -839.5px 11.1111%; z-index: 3; width: 11.1111%;\"><div class=\"fc-content\"><div class=\"fc-time\" data-start=\"19:30\" data-full=\"7:30 PM\"><span>19:30</span></div><div class=\"fc-title\">조소영.2종합무 <p class=\"text_red\"></p></div></div><div class=\"fc-bg\"></div></a>",
+    "classes": "fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device2"
+  },
+  {
+    "text": "09:00\n운영",
+    "html": "<a class=\"fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_blue device4\" style=\"inset: 119.5px auto -839.5px 33.3333%; z-index: 1; width: 11.1111%;\"><div class=\"fc-content\"><div class=\"fc-time\" data-start=\"09:00\" data-full=\"9:00 AM\"><span>09:00</span></div><div class=\"fc-title\">운영 <p class=\"text_red\"></p></div></div><div class=\"fc-bg\"></div></a>",
+    "classes": "fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_blue device4"
+  },
+  {
+    "text": "09:00\n지수민1자합무",
+    "html": "<a class=\"fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_gray device2\" style=\"inset: 119.5px auto -209.5px 11.1111%; z-index: 2; width: 11.1111%;\"><div class=\"fc-content\"><div class=\"fc-time\" data-start=\"09:00\" data-full=\"9:00 AM\"><span>09:00</span></div><div class=\"fc-title\">지수민1자합무 <p class=\"text_red\"></p></div></div><div class=\"fc-bg\"></div></a>",
+    "classes": "fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_gray device2"
+  },
+  {
+    "text": "09:00\n윤태건2종합무\n\n[시험]",
+    "html": "<a class=\"fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device1\" style=\"inset: 119.5px auto -179.5px 0%; z-index: 3; width: 11.1111%;\"><div class=\"fc-content\"><div class=\"fc-time\" data-start=\"09:00\" data-full=\"9:00 AM\"><span>09:00</span></div><div class=\"fc-title\">윤태건2종합무 <p class=\"text_red\">[시험]</p></div></div><div class=\"fc-bg\"></div></a>",
+    "classes": "fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device1"
+  },
+  {
+    "text": "10:00\n안세연.2종합무",
+    "html": "<a class=\"fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device1\" style=\"inset: 179.5px auto -299.5px 0%; z-index: 3; width: 11.1111%;\"><div class=\"fc-content\"><div class=\"fc-time\" data-start=\"10:00\" data-full=\"10:00 AM\"><span>10:00</span></div><div class=\"fc-title\">안세연.2종합무 <p class=\"text_red\"></p></div></div><div class=\"fc-bg\"></div></a>",
+    "classes": "fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device1"
+  },
+  {
+    "text": "10:00\n염은경2종합무",
+    "html": "<a class=\"fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device3\" style=\"inset: 179.5px auto -299.5px 22.2222%; z-index: 4; width: 11.1111%;\"><div class=\"fc-content\"><div class=\"fc-time\" data-start=\"10:00\" data-full=\"10:00 AM\"><span>10:00</span></div><div class=\"fc-title\">염은경2종합무 <p class=\"text_red\"></p></div></div><div class=\"fc-bg\"></div></a>",
+    "classes": "fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device3"
+  },
+  {
+    "text": "10:00\n추봉주2종합무",
+    "html": "<a class=\"fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device5\" style=\"inset: 179.5px auto -299.5px 44.4444%; z-index: 5; width: 11.1111%;\"><div class=\"fc-content\"><div class=\"fc-time\" data-start=\"10:00\" data-full=\"10:00 AM\"><span>10:00</span></div><div class=\"fc-title\">추봉주2종합무 <p class=\"text_red\"></p></div></div><div class=\"fc-bg\"></div></a>",
+    "classes": "fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device5"
+  },
+  {
+    "text": "10:30\n박연우2종합무",
+    "html": "<a class=\"fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device2\" style=\"inset: 209.5px auto -329.5px 11.1111%; z-index: 2; width: 11.1111%;\"><div class=\"fc-content\"><div class=\"fc-time\" data-start=\"10:30\" data-full=\"10:30 AM\"><span>10:30</span></div><div class=\"fc-title\">박연우2종합무 <p class=\"text_red\"></p></div></div><div class=\"fc-bg\"></div></a>",
+    "classes": "fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device2"
+  },
+  {
+    "text": "11:00\n김하진/시간제\n\n[시간제]",
+    "html": "<a class=\"fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_yellow device6\" style=\"inset: 239.5px auto -299.5px 55.5556%; z-index: 6; width: 11.1111%;\"><div class=\"fc-content\"><div class=\"fc-time\" data-start=\"11:00\" data-full=\"11:00 AM\"><span>11:00</span></div><div class=\"fc-title\">김하진/시간제 <p class=\"text_red\">[시간제]</p></div></div><div class=\"fc-bg\"></div></a>",
+    "classes": "fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_yellow device6"
+  },
+  {
+    "text": "12:00\n남우석2종합무",
+    "html": "<a class=\"fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device3\" style=\"inset: 299.5px auto -419.5px 22.2222%; z-index: 3; width: 11.1111%;\"><div class=\"fc-content\"><div class=\"fc-time\" data-start=\"12:00\" data-full=\"12:00 PM\"><span>12:00</span></div><div class=\"fc-title\">남우석2종합무 <p class=\"text_red\"></p></div></div><div class=\"fc-bg\"></div></a>",
+    "classes": "fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device3"
+  },
+  {
+    "text": "12:00\n이셈/상담",
+    "html": "<a class=\"fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_blue device9 bd_red\" style=\"inset: 299.5px auto -329.5px 88.8889%; z-index: 4; width: 11.1111%;\"><div class=\"fc-content\"><div class=\"fc-time\" data-start=\"12:00\" data-full=\"12:00 PM\"><span>12:00</span></div><div class=\"fc-title\">이셈/상담 <p class=\"text_red\"></p></div></div><div class=\"fc-bg\"></div></a>",
+    "classes": "fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_blue device9 bd_red"
+  },
+  {
+    "text": "13:00\n박현주.2종합무",
+    "html": "<a class=\"fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device2\" style=\"inset: 359.5px auto -479.5px 11.1111%; z-index: 2; width: 11.1111%;\"><div class=\"fc-content\"><div class=\"fc-time\" data-start=\"13:00\" data-full=\"1:00 PM\"><span>13:00</span></div><div class=\"fc-title\">박현주.2종합무 <p class=\"text_red\"></p></div></div><div class=\"fc-bg\"></div></a>",
+    "classes": "fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device2"
+  },
+  {
+    "text": "13:00\n신효준도로합무",
+    "html": "<a class=\"fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device1\" style=\"inset: 359.5px auto -479.5px 0%; z-index: 4; width: 11.1111%;\"><div class=\"fc-content\"><div class=\"fc-time\" data-start=\"13:00\" data-full=\"1:00 PM\"><span>13:00</span></div><div class=\"fc-title\">신효준도로합무 <p class=\"text_red\"></p></div></div><div class=\"fc-bg\"></div></a>",
+    "classes": "fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device1"
+  },
+  {
+    "text": "14:00\n노다지2종합무\n\n[미납]",
+    "html": "<a class=\"fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_gray device3\" style=\"inset: 419.5px auto -539.5px 22.2222%; z-index: 3; width: 11.1111%;\"><div class=\"fc-content\"><div class=\"fc-time\" data-start=\"14:00\" data-full=\"2:00 PM\"><span>14:00</span></div><div class=\"fc-title\">노다지2종합무 <p class=\"text_red\">[미납]</p></div></div><div class=\"fc-bg\"></div></a>",
+    "classes": "fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_gray device3"
+  },
+  {
+    "text": "15:00\n전우정2종합무\n\n[시험]",
+    "html": "<a class=\"fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device1\" style=\"inset: 479.5px auto -599.5px 0%; z-index: 2; width: 11.1111%;\"><div class=\"fc-content\"><div class=\"fc-time\" data-start=\"15:00\" data-full=\"3:00 PM\"><span>15:00</span></div><div class=\"fc-title\">전우정2종합무 <p class=\"text_red\">[시험]</p></div></div><div class=\"fc-bg\"></div></a>",
+    "classes": "fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device1"
+  },
+  {
+    "text": "15:00\n시간제/박선미\n\n[시간제][미납]",
+    "html": "<a class=\"fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_yellow device2 bd_red\" style=\"inset: 479.5px auto -539.5px 11.1111%; z-index: 4; width: 11.1111%;\"><div class=\"fc-content\"><div class=\"fc-time\" data-start=\"15:00\" data-full=\"3:00 PM\"><span>15:00</span></div><div class=\"fc-title\">시간제/박선미 <p class=\"text_red\">[시간제][미납]</p></div></div><div class=\"fc-bg\"></div></a>",
+    "classes": "fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_yellow device2 bd_red"
+  },
+  {
+    "text": "15:30\n채하늘.2종합무\n\n[미납]",
+    "html": "<a class=\"fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device5\" style=\"inset: 509.5px auto -599.5px 44.4444%; z-index: 5; width: 11.1111%;\"><div class=\"fc-content\"><div class=\"fc-time\" data-start=\"15:30\" data-full=\"3:30 PM\"><span>15:30</span></div><div class=\"fc-title\">채하늘.2종합무 <p class=\"text_red\">[미납]</p></div></div><div class=\"fc-bg\"></div></a>",
+    "classes": "fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device5"
+  },
+  {
+    "text": "16:00\n김수진/시간제\n\n[시간제]",
+    "html": "<a class=\"fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_yellow device2\" style=\"inset: 539.5px auto -599.5px 11.1111%; z-index: 3; width: 11.1111%;\"><div class=\"fc-content\"><div class=\"fc-time\" data-start=\"16:00\" data-full=\"4:00 PM\"><span>16:00</span></div><div class=\"fc-title\">김수진/시간제 <p class=\"text_red\">[시간제]</p></div></div><div class=\"fc-bg\"></div></a>",
+    "classes": "fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_yellow device2"
+  },
+  {
+    "text": "17:00\n서승환2종합무",
+    "html": "<a class=\"fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device1\" style=\"inset: 599.5px auto -719.5px 0%; z-index: 2; width: 11.1111%;\"><div class=\"fc-content\"><div class=\"fc-time\" data-start=\"17:00\" data-full=\"5:00 PM\"><span>17:00</span></div><div class=\"fc-title\">서승환2종합무 <p class=\"text_red\"></p></div></div><div class=\"fc-bg\"></div></a>",
+    "classes": "fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device1"
+  },
+  {
+    "text": "17:00\n윤지호2종합무",
+    "html": "<a class=\"fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device2\" style=\"inset: 599.5px auto -719.5px 11.1111%; z-index: 3; width: 11.1111%;\"><div class=\"fc-content\"><div class=\"fc-time\" data-start=\"17:00\" data-full=\"5:00 PM\"><span>17:00</span></div><div class=\"fc-title\">윤지호2종합무 <p class=\"text_red\"></p></div></div><div class=\"fc-bg\"></div></a>",
+    "classes": "fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device2"
+  },
+  {
+    "text": "17:00\n아리야2종합무\n\n[미납]",
+    "html": "<a class=\"fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device3\" style=\"inset: 599.5px auto -659.5px 22.2222%; z-index: 4; width: 11.1111%;\"><div class=\"fc-content\"><div class=\"fc-time\" data-start=\"17:00\" data-full=\"5:00 PM\"><span>17:00</span></div><div class=\"fc-title\">아리야2종합무 <p class=\"text_red\">[미납]</p></div></div><div class=\"fc-bg\"></div></a>",
+    "classes": "fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device3"
+  },
+  {
+    "text": "18:00\n이미정2종합무",
+    "html": "<a class=\"fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device3\" style=\"inset: 659.5px auto -779.5px 22.2222%; z-index: 4; width: 11.1111%;\"><div class=\"fc-content\"><div class=\"fc-time\" data-start=\"18:00\" data-full=\"6:00 PM\"><span>18:00</span></div><div class=\"fc-title\">이미정2종합무 <p class=\"text_red\"></p></div></div><div class=\"fc-bg\"></div></a>",
+    "classes": "fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device3"
+  },
+  {
+    "text": "19:00\n김찬휘1종자동합무\n\n[미납]",
+    "html": "<a class=\"fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device1\" style=\"inset: 719.5px auto -839.5px 0%; z-index: 2; width: 11.1111%;\"><div class=\"fc-content\"><div class=\"fc-time\" data-start=\"19:00\" data-full=\"7:00 PM\"><span>19:00</span></div><div class=\"fc-title\">김찬휘1종자동합무 <p class=\"text_red\">[미납]</p></div></div><div class=\"fc-bg\"></div></a>",
+    "classes": "fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device1"
+  },
+  {
+    "text": "09:00\n운영",
+    "html": "<a class=\"fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_blue device4\" style=\"inset: 119.5px auto -839.5px 33.3333%; z-index: 1; width: 11.1111%;\"><div class=\"fc-content\"><div class=\"fc-time\" data-start=\"09:00\" data-full=\"9:00 AM\"><span>09:00</span></div><div class=\"fc-title\">운영 <p class=\"text_red\"></p></div></div><div class=\"fc-bg\"></div></a>",
+    "classes": "fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_blue device4"
+  },
+  {
+    "text": "09:00\n박종훈2종합무",
+    "html": "<a class=\"fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device1\" style=\"inset: 119.5px auto -239.5px 0%; z-index: 2; width: 11.1111%;\"><div class=\"fc-content\"><div class=\"fc-time\" data-start=\"09:00\" data-full=\"9:00 AM\"><span>09:00</span></div><div class=\"fc-title\">박종훈2종합무 <p class=\"text_red\"></p></div></div><div class=\"fc-bg\"></div></a>",
+    "classes": "fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device1"
+  },
+  {
+    "text": "09:30\n허수정",
+    "html": "<a class=\"fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_blue device9 bd_red\" style=\"inset: 149.5px auto -179.5px 88.8889%; z-index: 3; width: 11.1111%;\"><div class=\"fc-content\"><div class=\"fc-time\" data-start=\"09:30\" data-full=\"9:30 AM\"><span>09:30</span></div><div class=\"fc-title\">허수정 <p class=\"text_red\"></p></div></div><div class=\"fc-bg\"></div></a>",
+    "classes": "fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_blue device9 bd_red"
+  },
+  {
+    "text": "10:00\n안세연.2종합무",
+    "html": "<a class=\"fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device2\" style=\"inset: 179.5px auto -299.5px 11.1111%; z-index: 3; width: 11.1111%;\"><div class=\"fc-content\"><div class=\"fc-time\" data-start=\"10:00\" data-full=\"10:00 AM\"><span>10:00</span></div><div class=\"fc-title\">안세연.2종합무 <p class=\"text_red\"></p></div></div><div class=\"fc-bg\"></div></a>",
+    "classes": "fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device2"
+  },
+  {
+    "text": "11:00\n윤태건2종합무",
+    "html": "<a class=\"fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device3\" style=\"inset: 239.5px auto -359.5px 22.2222%; z-index: 2; width: 11.1111%;\"><div class=\"fc-content\"><div class=\"fc-time\" data-start=\"11:00\" data-full=\"11:00 AM\"><span>11:00</span></div><div class=\"fc-title\">윤태건2종합무 <p class=\"text_red\"></p></div></div><div class=\"fc-bg\"></div></a>",
+    "classes": "fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device3"
+  },
+  {
+    "text": "11:00\n추봉주2종합무",
+    "html": "<a class=\"fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device5\" style=\"inset: 239.5px auto -359.5px 44.4444%; z-index: 4; width: 11.1111%;\"><div class=\"fc-content\"><div class=\"fc-time\" data-start=\"11:00\" data-full=\"11:00 AM\"><span>11:00</span></div><div class=\"fc-title\">추봉주2종합무 <p class=\"text_red\"></p></div></div><div class=\"fc-bg\"></div></a>",
+    "classes": "fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device5"
+  },
+  {
+    "text": "11:30\n이은자2종합무",
+    "html": "<a class=\"fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device1\" style=\"inset: 269.5px auto -449.5px 0%; z-index: 5; width: 11.1111%;\"><div class=\"fc-content\"><div class=\"fc-time\" data-start=\"11:30\" data-full=\"11:30 AM\"><span>11:30</span></div><div class=\"fc-title\">이은자2종합무 <p class=\"text_red\"></p></div></div><div class=\"fc-bg\"></div></a>",
+    "classes": "fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device1"
+  },
+  {
+    "text": "12:00\n남우석2종합무",
+    "html": "<a class=\"fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device2\" style=\"inset: 299.5px auto -359.5px 11.1111%; z-index: 3; width: 11.1111%;\"><div class=\"fc-content\"><div class=\"fc-time\" data-start=\"12:00\" data-full=\"12:00 PM\"><span>12:00</span></div><div class=\"fc-title\">남우석2종합무 <p class=\"text_red\"></p></div></div><div class=\"fc-bg\"></div></a>",
+    "classes": "fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device2"
+  },
+  {
+    "text": "13:00\n박연우2종합무",
+    "html": "<a class=\"fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device3\" style=\"inset: 359.5px auto -479.5px 22.2222%; z-index: 2; width: 11.1111%;\"><div class=\"fc-content\"><div class=\"fc-time\" data-start=\"13:00\" data-full=\"1:00 PM\"><span>13:00</span></div><div class=\"fc-title\">박연우2종합무 <p class=\"text_red\"></p></div></div><div class=\"fc-bg\"></div></a>",
+    "classes": "fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device3"
+  },
+  {
+    "text": "13:00\n신효준도로합무",
+    "html": "<a class=\"fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device2\" style=\"inset: 359.5px auto -479.5px 11.1111%; z-index: 3; width: 11.1111%;\"><div class=\"fc-content\"><div class=\"fc-time\" data-start=\"13:00\" data-full=\"1:00 PM\"><span>13:00</span></div><div class=\"fc-title\">신효준도로합무 <p class=\"text_red\"></p></div></div><div class=\"fc-bg\"></div></a>",
+    "classes": "fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device2"
+  },
+  {
+    "text": "13:30\n시간제\n\n[시간제]",
+    "html": "<a class=\"fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_yellow device5\" style=\"inset: 389.5px auto -449.5px 44.4444%; z-index: 4; width: 11.1111%;\"><div class=\"fc-content\"><div class=\"fc-time\" data-start=\"13:30\" data-full=\"1:30 PM\"><span>13:30</span></div><div class=\"fc-title\">시간제 <p class=\"text_red\">[시간제]</p></div></div><div class=\"fc-bg\"></div></a>",
+    "classes": "fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_yellow device5"
+  },
+  {
+    "text": "14:30\n전우정2종합무",
+    "html": "<a class=\"fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device1\" style=\"inset: 449.5px auto -509.5px 0%; z-index: 4; width: 11.1111%;\"><div class=\"fc-content\"><div class=\"fc-time\" data-start=\"14:30\" data-full=\"2:30 PM\"><span>14:30</span></div><div class=\"fc-title\">전우정2종합무 <p class=\"text_red\"></p></div></div><div class=\"fc-bg\"></div></a>",
+    "classes": "fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device1"
+  },
+  {
+    "text": "15:00\n박선미(장)12\n\n[시간제]",
+    "html": "<a class=\"fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_yellow device3\" style=\"inset: 479.5px auto -599.5px 22.2222%; z-index: 2; width: 11.1111%;\"><div class=\"fc-content\"><div class=\"fc-time\" data-start=\"15:00\" data-full=\"3:00 PM\"><span>15:00</span></div><div class=\"fc-title\">박선미(장)12 <p class=\"text_red\">[시간제]</p></div></div><div class=\"fc-bg\"></div></a>",
+    "classes": "fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_yellow device3"
+  },
+  {
+    "text": "15:30\n시간제\n\n[시간제]",
+    "html": "<a class=\"fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_yellow device2\" style=\"inset: 509.5px auto -569.5px 11.1111%; z-index: 3; width: 11.1111%;\"><div class=\"fc-content\"><div class=\"fc-time\" data-start=\"15:30\" data-full=\"3:30 PM\"><span>15:30</span></div><div class=\"fc-title\">시간제 <p class=\"text_red\">[시간제]</p></div></div><div class=\"fc-bg\"></div></a>",
+    "classes": "fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_yellow device2"
+  },
+  {
+    "text": "16:00\n박현주.2종합무",
+    "html": "<a class=\"fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device1\" style=\"inset: 539.5px auto -659.5px 0%; z-index: 4; width: 11.1111%;\"><div class=\"fc-content\"><div class=\"fc-time\" data-start=\"16:00\" data-full=\"4:00 PM\"><span>16:00</span></div><div class=\"fc-title\">박현주.2종합무 <p class=\"text_red\"></p></div></div><div class=\"fc-bg\"></div></a>",
+    "classes": "fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device1"
+  },
+  {
+    "text": "16:00\n구진성2종합무\n\n[미납]",
+    "html": "<a class=\"fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device5\" style=\"inset: 539.5px auto -599.5px 44.4444%; z-index: 5; width: 11.1111%;\"><div class=\"fc-content\"><div class=\"fc-time\" data-start=\"16:00\" data-full=\"4:00 PM\"><span>16:00</span></div><div class=\"fc-title\">구진성2종합무 <p class=\"text_red\">[미납]</p></div></div><div class=\"fc-bg\"></div></a>",
+    "classes": "fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device5"
+  },
+  {
+    "text": "17:00\n박종훈2종합무",
+    "html": "<a class=\"fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device2\" style=\"inset: 599.5px auto -719.5px 11.1111%; z-index: 2; width: 11.1111%;\"><div class=\"fc-content\"><div class=\"fc-time\" data-start=\"17:00\" data-full=\"5:00 PM\"><span>17:00</span></div><div class=\"fc-title\">박종훈2종합무 <p class=\"text_red\"></p></div></div><div class=\"fc-bg\"></div></a>",
+    "classes": "fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device2"
+  },
+  {
+    "text": "17:00\n서승환2종합무",
+    "html": "<a class=\"fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device3\" style=\"inset: 599.5px auto -719.5px 22.2222%; z-index: 3; width: 11.1111%;\"><div class=\"fc-content\"><div class=\"fc-time\" data-start=\"17:00\" data-full=\"5:00 PM\"><span>17:00</span></div><div class=\"fc-title\">서승환2종합무 <p class=\"text_red\"></p></div></div><div class=\"fc-bg\"></div></a>",
+    "classes": "fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device3"
+  },
+  {
+    "text": "17:00\n지수민1자합무",
+    "html": "<a class=\"fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device5\" style=\"inset: 599.5px auto -719.5px 44.4444%; z-index: 5; width: 11.1111%;\"><div class=\"fc-content\"><div class=\"fc-time\" data-start=\"17:00\" data-full=\"5:00 PM\"><span>17:00</span></div><div class=\"fc-title\">지수민1자합무 <p class=\"text_red\"></p></div></div><div class=\"fc-bg\"></div></a>",
+    "classes": "fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device5"
+  },
+  {
+    "text": "18:00\n박태현.장롱24",
+    "html": "<a class=\"fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_yellow device1\" style=\"inset: 659.5px auto -779.5px 0%; z-index: 4; width: 11.1111%;\"><div class=\"fc-content\"><div class=\"fc-time\" data-start=\"18:00\" data-full=\"6:00 PM\"><span>18:00</span></div><div class=\"fc-title\">박태현.장롱24 <p class=\"text_red\"></p></div></div><div class=\"fc-bg\"></div></a>",
+    "classes": "fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_yellow device1"
+  },
+  {
+    "text": "18:30\n송서영/상담",
+    "html": "<a class=\"fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_blue device9\" style=\"inset: 689.5px auto -719.5px 88.8889%; z-index: 6; width: 11.1111%;\"><div class=\"fc-content\"><div class=\"fc-time\" data-start=\"18:30\" data-full=\"6:30 PM\"><span>18:30</span></div><div class=\"fc-title\">송서영/상담 <p class=\"text_red\"></p></div></div><div class=\"fc-bg\"></div></a>",
+    "classes": "fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_blue device9"
+  },
+  {
+    "text": "19:00\n송서영2종도로",
+    "html": "<a class=\"fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device5\" style=\"inset: 719.5px auto -839.5px 44.4444%; z-index: 2; width: 11.1111%;\"><div class=\"fc-content\"><div class=\"fc-time\" data-start=\"19:00\" data-full=\"7:00 PM\"><span>19:00</span></div><div class=\"fc-title\">송서영2종도로 <p class=\"text_red\"></p></div></div><div class=\"fc-bg\"></div></a>",
+    "classes": "fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device5"
+  },
+  {
+    "text": "19:30\n이병호2종합무",
+    "html": "<a class=\"fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device3\" style=\"inset: 749.5px auto -839.5px 22.2222%; z-index: 3; width: 11.1111%;\"><div class=\"fc-content\"><div class=\"fc-time\" data-start=\"19:30\" data-full=\"7:30 PM\"><span>19:30</span></div><div class=\"fc-title\">이병호2종합무 <p class=\"text_red\"></p></div></div><div class=\"fc-bg\"></div></a>",
+    "classes": "fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device3"
+  },
+  {
+    "text": "19:30\n조소영.2종합무",
+    "html": "<a class=\"fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device2\" style=\"inset: 749.5px auto -839.5px 11.1111%; z-index: 5; width: 11.1111%;\"><div class=\"fc-content\"><div class=\"fc-time\" data-start=\"19:30\" data-full=\"7:30 PM\"><span>19:30</span></div><div class=\"fc-title\">조소영.2종합무 <p class=\"text_red\"></p></div></div><div class=\"fc-bg\"></div></a>",
+    "classes": "fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device2"
+  },
+  {
+    "text": "21:00\n이희상.2종합무",
+    "html": "<a class=\"fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device1\" style=\"inset: 839.5px auto -869.5px 0%; z-index: 1; width: 11.1111%;\"><div class=\"fc-content\"><div class=\"fc-time\" data-start=\"21:00\" data-full=\"9:00 PM\"><span>21:00</span></div><div class=\"fc-title\">이희상.2종합무 <p class=\"text_red\"></p></div></div><div class=\"fc-bg\"></div></a>",
+    "classes": "fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device1"
+  },
+  {
+    "text": "10:00\n운영",
+    "html": "<a class=\"fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_blue device4\" style=\"inset: 179.5px auto -779.5px 33.3333%; z-index: 1; width: 11.1111%;\"><div class=\"fc-content\"><div class=\"fc-time\" data-start=\"10:00\" data-full=\"10:00 AM\"><span>10:00</span></div><div class=\"fc-title\">운영 <p class=\"text_red\"></p></div></div><div class=\"fc-bg\"></div></a>",
+    "classes": "fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_blue device4"
+  },
+  {
+    "text": "10:00\n김유연(장)/24\n\n[시간제]",
+    "html": "<a class=\"fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_yellow device3\" style=\"inset: 179.5px auto -299.5px 22.2222%; z-index: 2; width: 11.1111%;\"><div class=\"fc-content\"><div class=\"fc-time\" data-start=\"10:00\" data-full=\"10:00 AM\"><span>10:00</span></div><div class=\"fc-title\">김유연(장)/24 <p class=\"text_red\">[시간제]</p></div></div><div class=\"fc-bg\"></div></a>",
+    "classes": "fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_yellow device3"
+  },
+  {
+    "text": "10:00\n김하진/시간제\n\n[시간제]",
+    "html": "<a class=\"fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_yellow device2\" style=\"inset: 179.5px auto -299.5px 11.1111%; z-index: 3; width: 11.1111%;\"><div class=\"fc-content\"><div class=\"fc-time\" data-start=\"10:00\" data-full=\"10:00 AM\"><span>10:00</span></div><div class=\"fc-title\">김하진/시간제 <p class=\"text_red\">[시간제]</p></div></div><div class=\"fc-bg\"></div></a>",
+    "classes": "fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_yellow device2"
+  },
+  {
+    "text": "10:00\n안세연.2종합무",
+    "html": "<a class=\"fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device1\" style=\"inset: 179.5px auto -299.5px 0%; z-index: 4; width: 11.1111%;\"><div class=\"fc-content\"><div class=\"fc-time\" data-start=\"10:00\" data-full=\"10:00 AM\"><span>10:00</span></div><div class=\"fc-title\">안세연.2종합무 <p class=\"text_red\"></p></div></div><div class=\"fc-bg\"></div></a>",
+    "classes": "fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device1"
+  },
+  {
+    "text": "12:00\n박종훈2종합무",
+    "html": "<a class=\"fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device3\" style=\"inset: 299.5px auto -419.5px 22.2222%; z-index: 2; width: 11.1111%;\"><div class=\"fc-content\"><div class=\"fc-time\" data-start=\"12:00\" data-full=\"12:00 PM\"><span>12:00</span></div><div class=\"fc-title\">박종훈2종합무 <p class=\"text_red\"></p></div></div><div class=\"fc-bg\"></div></a>",
+    "classes": "fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device3"
+  },
+  {
+    "text": "13:00\n서현미(장)36",
+    "html": "<a class=\"fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_yellow device2\" style=\"inset: 359.5px auto -479.5px 11.1111%; z-index: 3; width: 11.1111%;\"><div class=\"fc-content\"><div class=\"fc-time\" data-start=\"13:00\" data-full=\"1:00 PM\"><span>13:00</span></div><div class=\"fc-title\">서현미(장)36 <p class=\"text_red\"></p></div></div><div class=\"fc-bg\"></div></a>",
+    "classes": "fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_yellow device2"
+  },
+  {
+    "text": "13:00\n신효준도로합무",
+    "html": "<a class=\"fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device1\" style=\"inset: 359.5px auto -479.5px 0%; z-index: 4; width: 11.1111%;\"><div class=\"fc-content\"><div class=\"fc-time\" data-start=\"13:00\" data-full=\"1:00 PM\"><span>13:00</span></div><div class=\"fc-title\">신효준도로합무 <p class=\"text_red\"></p></div></div><div class=\"fc-bg\"></div></a>",
+    "classes": "fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device1"
+  },
+  {
+    "text": "14:00\n이은자2종합무",
+    "html": "<a class=\"fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device3\" style=\"inset: 419.5px auto -599.5px 22.2222%; z-index: 2; width: 11.1111%;\"><div class=\"fc-content\"><div class=\"fc-time\" data-start=\"14:00\" data-full=\"2:00 PM\"><span>14:00</span></div><div class=\"fc-title\">이은자2종합무 <p class=\"text_red\"></p></div></div><div class=\"fc-bg\"></div></a>",
+    "classes": "fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device3"
+  },
+  {
+    "text": "14:00\n송한경2종합무",
+    "html": "<a class=\"fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device5\" style=\"inset: 419.5px auto -539.5px 44.4444%; z-index: 5; width: 11.1111%;\"><div class=\"fc-content\"><div class=\"fc-time\" data-start=\"14:00\" data-full=\"2:00 PM\"><span>14:00</span></div><div class=\"fc-title\">송한경2종합무 <p class=\"text_red\"></p></div></div><div class=\"fc-bg\"></div></a>",
+    "classes": "fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device5"
+  },
+  {
+    "text": "15:00\n구진성2종합무\n\n[미납]",
+    "html": "<a class=\"fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device1\" style=\"inset: 479.5px auto -599.5px 0%; z-index: 3; width: 11.1111%;\"><div class=\"fc-content\"><div class=\"fc-time\" data-start=\"15:00\" data-full=\"3:00 PM\"><span>15:00</span></div><div class=\"fc-title\">구진성2종합무 <p class=\"text_red\">[미납]</p></div></div><div class=\"fc-bg\"></div></a>",
+    "classes": "fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device1"
+  },
+  {
+    "text": "16:00\n최하림.2종합무",
+    "html": "<a class=\"fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device2\" style=\"inset: 539.5px auto -659.5px 11.1111%; z-index: 4; width: 11.1111%;\"><div class=\"fc-content\"><div class=\"fc-time\" data-start=\"16:00\" data-full=\"4:00 PM\"><span>16:00</span></div><div class=\"fc-title\">최하림.2종합무 <p class=\"text_red\"></p></div></div><div class=\"fc-bg\"></div></a>",
+    "classes": "fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device2"
+  },
+  {
+    "text": "17:00\n서승환2종합무",
+    "html": "<a class=\"fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device1\" style=\"inset: 599.5px auto -719.5px 0%; z-index: 2; width: 11.1111%;\"><div class=\"fc-content\"><div class=\"fc-time\" data-start=\"17:00\" data-full=\"5:00 PM\"><span>17:00</span></div><div class=\"fc-title\">서승환2종합무 <p class=\"text_red\"></p></div></div><div class=\"fc-bg\"></div></a>",
+    "classes": "fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device1"
+  },
+  {
+    "text": "17:30\n이미정2종합무",
+    "html": "<a class=\"fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device3\" style=\"inset: 629.5px auto -749.5px 22.2222%; z-index: 3; width: 11.1111%;\"><div class=\"fc-content\"><div class=\"fc-time\" data-start=\"17:30\" data-full=\"5:30 PM\"><span>17:30</span></div><div class=\"fc-title\">이미정2종합무 <p class=\"text_red\"></p></div></div><div class=\"fc-bg\"></div></a>",
+    "classes": "fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device3"
+  },
+  {
+    "text": "18:00\n이상진.2합무",
+    "html": "<a class=\"fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device2\" style=\"inset: 659.5px auto -779.5px 11.1111%; z-index: 4; width: 11.1111%;\"><div class=\"fc-content\"><div class=\"fc-time\" data-start=\"18:00\" data-full=\"6:00 PM\"><span>18:00</span></div><div class=\"fc-title\">이상진.2합무 <p class=\"text_red\"></p></div></div><div class=\"fc-bg\"></div></a>",
+    "classes": "fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device2"
+  },
+  {
+    "text": "19:30\n이병호2종합무",
+    "html": "<a class=\"fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device3\" style=\"inset: 749.5px auto -779.5px 22.2222%; z-index: 2; width: 11.1111%;\"><div class=\"fc-content\"><div class=\"fc-time\" data-start=\"19:30\" data-full=\"7:30 PM\"><span>19:30</span></div><div class=\"fc-title\">이병호2종합무 <p class=\"text_red\"></p></div></div><div class=\"fc-bg\"></div></a>",
+    "classes": "fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device3"
+  },
+  {
+    "text": "10:00\n운영",
+    "html": "<a class=\"fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_blue device4\" style=\"inset: 179.5px auto -779.5px 33.3333%; z-index: 1; width: 11.1111%;\"><div class=\"fc-content\"><div class=\"fc-time\" data-start=\"10:00\" data-full=\"10:00 AM\"><span>10:00</span></div><div class=\"fc-title\">운영 <p class=\"text_red\"></p></div></div><div class=\"fc-bg\"></div></a>",
+    "classes": "fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_blue device4"
+  },
+  {
+    "text": "10:00\n안세연.2종합무",
+    "html": "<a class=\"fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device1\" style=\"inset: 179.5px auto -299.5px 0%; z-index: 2; width: 11.1111%;\"><div class=\"fc-content\"><div class=\"fc-time\" data-start=\"10:00\" data-full=\"10:00 AM\"><span>10:00</span></div><div class=\"fc-title\">안세연.2종합무 <p class=\"text_red\"></p></div></div><div class=\"fc-bg\"></div></a>",
+    "classes": "fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device1"
+  },
+  {
+    "text": "10:00\n박보배/리뷰노트",
+    "html": "<a class=\"fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_blue device2\" style=\"inset: 179.5px auto -239.5px 11.1111%; z-index: 3; width: 11.1111%;\"><div class=\"fc-content\"><div class=\"fc-time\" data-start=\"10:00\" data-full=\"10:00 AM\"><span>10:00</span></div><div class=\"fc-title\">박보배/리뷰노트 <p class=\"text_red\"></p></div></div><div class=\"fc-bg\"></div></a>",
+    "classes": "fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_blue device2"
+  },
+  {
+    "text": "12:00\n김하진/시간제\n\n[시간제]",
+    "html": "<a class=\"fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_yellow device3\" style=\"inset: 299.5px auto -479.5px 22.2222%; z-index: 2; width: 11.1111%;\"><div class=\"fc-content\"><div class=\"fc-time\" data-start=\"12:00\" data-full=\"12:00 PM\"><span>12:00</span></div><div class=\"fc-title\">김하진/시간제 <p class=\"text_red\">[시간제]</p></div></div><div class=\"fc-bg\"></div></a>",
+    "classes": "fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_yellow device3"
+  },
+  {
+    "text": "12:30\n서승환2종합무",
+    "html": "<a class=\"fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_gray device1\" style=\"inset: 329.5px auto -449.5px 0%; z-index: 3; width: 11.1111%;\"><div class=\"fc-content\"><div class=\"fc-time\" data-start=\"12:30\" data-full=\"12:30 PM\"><span>12:30</span></div><div class=\"fc-title\">서승환2종합무 <p class=\"text_red\"></p></div></div><div class=\"fc-bg\"></div></a>",
+    "classes": "fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_gray device1"
+  },
+  {
+    "text": "14:00\n송한경2종합무",
+    "html": "<a class=\"fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device2\" style=\"inset: 419.5px auto -539.5px 11.1111%; z-index: 4; width: 11.1111%;\"><div class=\"fc-content\"><div class=\"fc-time\" data-start=\"14:00\" data-full=\"2:00 PM\"><span>14:00</span></div><div class=\"fc-title\">송한경2종합무 <p class=\"text_red\"></p></div></div><div class=\"fc-bg\"></div></a>",
+    "classes": "fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device2"
+  },
+  {
+    "text": "14:00\n서현미(장)36",
+    "html": "<a class=\"fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_yellow device5\" style=\"inset: 419.5px auto -479.5px 44.4444%; z-index: 5; width: 11.1111%;\"><div class=\"fc-content\"><div class=\"fc-time\" data-start=\"14:00\" data-full=\"2:00 PM\"><span>14:00</span></div><div class=\"fc-title\">서현미(장)36 <p class=\"text_red\"></p></div></div><div class=\"fc-bg\"></div></a>",
+    "classes": "fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_yellow device5"
+  },
+  {
+    "text": "14:30\n이시우.2종합무\n\n[메모]",
+    "html": "<a class=\"fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device6\" style=\"inset: 449.5px auto -569.5px 55.5556%; z-index: 3; width: 11.1111%;\"><div class=\"fc-content\"><div class=\"fc-time\" data-start=\"14:30\" data-full=\"2:30 PM\"><span>14:30</span></div><div class=\"fc-title\">이시우.2종합무 <p class=\"text_red\">[메모]</p></div></div><div class=\"fc-bg\"></div></a>",
+    "classes": "fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device6"
+  },
+  {
+    "text": "15:00\n박선미(장)12\n\n[시간제]",
+    "html": "<a class=\"fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_yellow device1\" style=\"inset: 479.5px auto -599.5px 0%; z-index: 2; width: 11.1111%;\"><div class=\"fc-content\"><div class=\"fc-time\" data-start=\"15:00\" data-full=\"3:00 PM\"><span>15:00</span></div><div class=\"fc-title\">박선미(장)12 <p class=\"text_red\">[시간제]</p></div></div><div class=\"fc-bg\"></div></a>",
+    "classes": "fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_yellow device1"
+  },
+  {
+    "text": "16:00\n박현주.2종합무",
+    "html": "<a class=\"fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device2\" style=\"inset: 539.5px auto -659.5px 11.1111%; z-index: 4; width: 11.1111%;\"><div class=\"fc-content\"><div class=\"fc-time\" data-start=\"16:00\" data-full=\"4:00 PM\"><span>16:00</span></div><div class=\"fc-title\">박현주.2종합무 <p class=\"text_red\"></p></div></div><div class=\"fc-bg\"></div></a>",
+    "classes": "fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device2"
+  },
+  {
+    "text": "17:00\n구진성2종합무\n\n[미납]",
+    "html": "<a class=\"fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device1\" style=\"inset: 599.5px auto -719.5px 0%; z-index: 2; width: 11.1111%;\"><div class=\"fc-content\"><div class=\"fc-time\" data-start=\"17:00\" data-full=\"5:00 PM\"><span>17:00</span></div><div class=\"fc-title\">구진성2종합무 <p class=\"text_red\">[미납]</p></div></div><div class=\"fc-bg\"></div></a>",
+    "classes": "fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device1"
+  },
+  {
+    "text": "17:00\n황성민.2종합무",
+    "html": "<a class=\"fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device3\" style=\"inset: 599.5px auto -719.5px 22.2222%; z-index: 3; width: 11.1111%;\"><div class=\"fc-content\"><div class=\"fc-time\" data-start=\"17:00\" data-full=\"5:00 PM\"><span>17:00</span></div><div class=\"fc-title\">황성민.2종합무 <p class=\"text_red\"></p></div></div><div class=\"fc-bg\"></div></a>",
+    "classes": "fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device3"
+  },
+  {
+    "text": "18:00\n김찬휘1종자동합무\n\n[미납]",
+    "html": "<a class=\"fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device2\" style=\"inset: 659.5px auto -779.5px 11.1111%; z-index: 4; width: 11.1111%;\"><div class=\"fc-content\"><div class=\"fc-time\" data-start=\"18:00\" data-full=\"6:00 PM\"><span>18:00</span></div><div class=\"fc-title\">김찬휘1종자동합무 <p class=\"text_red\">[미납]</p></div></div><div class=\"fc-bg\"></div></a>",
+    "classes": "fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device2"
+  },
+  {
+    "text": "10:00\n운영",
+    "html": "<a class=\"fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_blue device4\" style=\"inset: 179.5px auto -659.5px 33.3333%; z-index: 1; width: 11.1111%;\"><div class=\"fc-content\"><div class=\"fc-time\" data-start=\"10:00\" data-full=\"10:00 AM\"><span>10:00</span></div><div class=\"fc-title\">운영 <p class=\"text_red\"></p></div></div><div class=\"fc-bg\"></div></a>",
+    "classes": "fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_blue device4"
+  },
+  {
+    "text": "10:00\n김유연(장)/24\n\n[시간제]",
+    "html": "<a class=\"fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_yellow device3\" style=\"inset: 179.5px auto -299.5px 22.2222%; z-index: 2; width: 11.1111%;\"><div class=\"fc-content\"><div class=\"fc-time\" data-start=\"10:00\" data-full=\"10:00 AM\"><span>10:00</span></div><div class=\"fc-title\">김유연(장)/24 <p class=\"text_red\">[시간제]</p></div></div><div class=\"fc-bg\"></div></a>",
+    "classes": "fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_yellow device3"
+  },
+  {
+    "text": "10:00\n염은경2종합무",
+    "html": "<a class=\"fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device2\" style=\"inset: 179.5px auto -299.5px 11.1111%; z-index: 3; width: 11.1111%;\"><div class=\"fc-content\"><div class=\"fc-time\" data-start=\"10:00\" data-full=\"10:00 AM\"><span>10:00</span></div><div class=\"fc-title\">염은경2종합무 <p class=\"text_red\"></p></div></div><div class=\"fc-bg\"></div></a>",
+    "classes": "fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device2"
+  },
+  {
+    "text": "12:00\n박현주.2종합무",
+    "html": "<a class=\"fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device1\" style=\"inset: 299.5px auto -419.5px 0%; z-index: 2; width: 11.1111%;\"><div class=\"fc-content\"><div class=\"fc-time\" data-start=\"12:00\" data-full=\"12:00 PM\"><span>12:00</span></div><div class=\"fc-title\">박현주.2종합무 <p class=\"text_red\"></p></div></div><div class=\"fc-bg\"></div></a>",
+    "classes": "fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device1"
+  },
+  {
+    "text": "13:30\n시간제\n\n[시간제]",
+    "html": "<a class=\"fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_yellow device3\" style=\"inset: 389.5px auto -449.5px 22.2222%; z-index: 3; width: 11.1111%;\"><div class=\"fc-content\"><div class=\"fc-time\" data-start=\"13:30\" data-full=\"1:30 PM\"><span>13:30</span></div><div class=\"fc-title\">시간제 <p class=\"text_red\">[시간제]</p></div></div><div class=\"fc-bg\"></div></a>",
+    "classes": "fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_yellow device3"
+  },
+  {
+    "text": "14:00\n이미정2종합무",
+    "html": "<a class=\"fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device2\" style=\"inset: 419.5px auto -539.5px 11.1111%; z-index: 2; width: 11.1111%;\"><div class=\"fc-content\"><div class=\"fc-time\" data-start=\"14:00\" data-full=\"2:00 PM\"><span>14:00</span></div><div class=\"fc-title\">이미정2종합무 <p class=\"text_red\"></p></div></div><div class=\"fc-bg\"></div></a>",
+    "classes": "fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device2"
+  },
+  {
+    "text": "15:00\n박종훈2종합무",
+    "html": "<a class=\"fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device3\" style=\"inset: 479.5px auto -659.5px 22.2222%; z-index: 3; width: 11.1111%;\"><div class=\"fc-content\"><div class=\"fc-time\" data-start=\"15:00\" data-full=\"3:00 PM\"><span>15:00</span></div><div class=\"fc-title\">박종훈2종합무 <p class=\"text_red\"></p></div></div><div class=\"fc-bg\"></div></a>",
+    "classes": "fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_red device3"
+  },
+  {
+    "text": "15:00\n박용연.6시간",
+    "html": "<a class=\"fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_yellow device1\" style=\"inset: 479.5px auto -599.5px 0%; z-index: 4; width: 11.1111%;\"><div class=\"fc-content\"><div class=\"fc-time\" data-start=\"15:00\" data-full=\"3:00 PM\"><span>15:00</span></div><div class=\"fc-title\">박용연.6시간 <p class=\"text_red\"></p></div></div><div class=\"fc-bg\"></div></a>",
+    "classes": "fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_yellow device1"
+  },
+  {
+    "text": "07:00\n박선미(장)12\n\n[시간제]",
+    "html": "<a class=\"fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_yellow device2\" style=\"inset: 0px auto -59.5px 11.1111%; z-index: 1; width: 11.1111%;\"><div class=\"fc-content\"><div class=\"fc-time\" data-start=\"07:00\" data-full=\"7:00 AM\"><span>07:00</span></div><div class=\"fc-title\">박선미(장)12 <p class=\"text_red\">[시간제]</p></div></div><div class=\"fc-bg\"></div></a>",
+    "classes": "fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_yellow device2"
+  },
+  {
+    "text": "07:00\n박용연.6시간",
+    "html": "<a class=\"fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_yellow device1\" style=\"inset: 0px auto -59.5px 0%; z-index: 2; width: 11.1111%;\"><div class=\"fc-content\"><div class=\"fc-time\" data-start=\"07:00\" data-full=\"7:00 AM\"><span>07:00</span></div><div class=\"fc-title\">박용연.6시간 <p class=\"text_red\"></p></div></div><div class=\"fc-bg\"></div></a>",
+    "classes": "fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_yellow device1"
+  }
+]

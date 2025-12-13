@@ -34,7 +34,7 @@ naver_session.json
 # Debug files
 debug.log
 debug_*.png
-*.html
+
 
 # Executables
 *.exe
@@ -43,3 +43,4 @@ debug_*.png
 # Other
 .DS_Store
 Thumbs.db
+node_modules

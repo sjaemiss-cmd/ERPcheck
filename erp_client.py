@@ -3,6 +3,7 @@ import sys
 import time
 import datetime
 import logging
+import re
 from playwright.sync_api import sync_playwright
 from dotenv import load_dotenv
 
@@ -46,7 +47,41 @@ class ERPClient:
         logging.info("Starting Playwright...")
         self.playwright = sync_playwright().start()
         self.browser = self.playwright.chromium.launch(headless=self.headless)
-        self.context = self.browser.new_context()
+        self.context = self.browser.new_context(
+            viewport={'width': 1920, 'height': 1080},
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        )
+        
+        # Intercept and patch invalid regex in HTML
+        def handle_route(route):
+            response = route.fetch()
+            body = response.body()
+            
+            try:
+                # Only try to patch text-based responses
+                content_type = response.headers.get("content-type", "")
+                if "text/html" in content_type:
+                    body_str = body.decode("utf-8")
+                    
+                    # Patch 1: [0-9,-].{11,13} -> [0-9,\-].{11,13}
+                    # Patch 2: [-0-9]* -> [\-0-9]*
+                    if 'pattern="[0-9,-].{11,13}"' in body_str:
+                        logging.info("Patching invalid regex pattern 1")
+                        body_str = body_str.replace('pattern="[0-9,-].{11,13}"', r'pattern="[0-9,\-].{11,13}"')
+                        
+                    if 'pattern="[-0-9]*"' in body_str:
+                        logging.info("Patching invalid regex pattern 2")
+                        body_str = body_str.replace('pattern="[-0-9]*"', r'pattern="[\-0-9]*"')
+                        
+                    body = body_str.encode("utf-8")
+            except Exception as e:
+                logging.warning(f"Error patching response: {e}")
+                
+            route.fulfill(response=response, body=body)
+
+        # Register the route handler for all URLs
+        self.context.route("**/*", handle_route)
+        
         self.page = self.context.new_page()
 
     def login(self):
@@ -733,108 +768,42 @@ class ERPClient:
         hours = total_seconds / 3600
         return round(hours, 1) # Return 1 decimal place
 
-    def get_missing_memos(self):
-        logging.info("Navigating to Calendar...")
-        print("Navigating to Calendar...")
-        self.page.goto("https://sook0517.cafe24.com/index/calender")
-        self.page.wait_for_load_state("networkidle")
-        logging.info("Calendar page loaded.")
-        print("Calendar page loaded.")
+    def get_member_history(self, name):
+        try:
+            logging.info(f"Searching history for {name}...")
+            # Ensure we are on member page
+            if "index/member" not in self.page.url:
+                self.page.goto("https://sook0517.cafe24.com/index/member")
+                self.page.wait_for_load_state("networkidle")
 
-        # Get all events data for duration calculation
-        today_events_data = self.get_today_events_data()
-        logging.info(f"Retrieved {len(today_events_data)} events via JS for duration calculation.")
-
-        today_header = self.page.locator(".fc-day-header.fc-today")
-        if today_header.count() == 0:
-            logging.warning("Today's header not found.")
-            print("Today's header not found.")
-            return []
-
-        headers = self.page.locator(".fc-day-header")
-        count = headers.count()
-        today_index = -1
-        for i in range(count):
-            if "fc-today" in headers.nth(i).get_attribute("class"):
-                today_index = i
-                break
-        
-        if today_index == -1:
-            logging.warning("Today's index not found.")
-            return []
-
-        event_col = self.page.locator(".fc-content-skeleton tr td").nth(today_index + 1)
-        events = event_col.locator(".fc-event")
-        event_count = events.count()
-        logging.info(f"Found {event_count} events today.")
-        print(f"Found {event_count} events today.")
-
-        missing_list = []
-        
-        for i in range(event_count):
-            event = events.nth(i)
-            event_title = event.text_content().strip()
+            self.page.fill("#search_text", name)
+            self.page.click("#search_btn")
+            self.page.wait_for_load_state("networkidle")
+            time.sleep(1) # Wait for table refresh
             
-            skip_keywords = ['리뷰노트', '시간제', '운영', '상담']
-            if any(keyword in event_title for keyword in skip_keywords):
-                logging.info(f"Skipping event: {event_title}")
-                continue
-
-            logging.info(f"Checking event: {event_title}")
-            event.click(force=True)
+            # Click first result
+            # Selector from scrape_memos.py: td:nth-child(2) a
+            # Use .first to avoid strict mode violation
+            link = self.page.locator("table.jambo_table tbody tr td:nth-child(2) a").first
+            if link.count() == 0:
+                logging.warning(f"Member {name} not found.")
+                return ""
+                
+            link.click()
             
-            modal_selector = "#CalenderModalEdit"
+            modal_selector = ".modifyModal[style*='display: block']"
             try:
-                self.page.wait_for_selector(modal_selector, state="visible", timeout=5000)
+                self.page.wait_for_selector(modal_selector, state="visible", timeout=3000)
             except:
-                logging.error(f"Timeout waiting for modal for event {i+1}")
+                logging.warning("Modal open timeout")
+                return ""
                 
+            modal = self.page.locator(modal_selector)
+            
+
+            result = {}
             try:
-                name_input = self.page.locator(f"{modal_selector} .modify_name")
-                name = name_input.input_value() if name_input.count() > 0 else "Unknown"
-
-                # Check #memo_area
-                memo_div = self.page.locator(f"{modal_selector} #memo_area")
-                if memo_div.count() > 0:
-                    with open("modal_dump.html", "w", encoding="utf-8") as f:
-                        f.write(self.page.locator(modal_selector).inner_html())
-                    memo_text = memo_div.inner_text().strip()
-                else:
-                    memo_text = ""
-                
-                today_str = datetime.date.today().strftime("%Y-%m-%d")
-                has_today_memo = False
-                
-                date_inputs = self.page.locator(f"{modal_selector} .modify_comment_date")
-                text_inputs = self.page.locator(f"{modal_selector} .modify_comment_text")
-                
-                count = date_inputs.count()
-                for k in range(count):
-                    date_val = date_inputs.nth(k).input_value().strip()
-                    text_val = text_inputs.nth(k).input_value().strip()
-                    if date_val == today_str and text_val:
-                        has_today_memo = True
-                        break
-                
-                is_missing = False
-                if not has_today_memo and not memo_text:
-                    is_missing = True
-                
-                logging.info(f"  Name: {name}, Today Memo: {has_today_memo}, General Memo: {bool(memo_text)}")
-                
-                if is_missing:
-                    logging.info("  -> Missing memo detected.")
-                    
-                    # Calculate duration
-                    duration = self.calculate_total_duration(name, today_events_data)
-                    
-                    missing_list.append({
-                        "name": name,
-                        "time": event_title,
-                        "index": i,
-                        "duration": duration
-                    })
-
+                result = self._extract_member_details_from_modal(modal)
             except Exception as e:
                 logging.error(f"Error extracting: {e}")
                 print(f"Error extracting: {e}")
@@ -846,7 +815,383 @@ class ERPClient:
             self.page.wait_for_selector(modal_selector, state="hidden", timeout=5000)
             time.sleep(0.5)
             
-        return missing_list
+            return result
+
+        except Exception as e:
+            logging.error(f"Error in get_member_history: {e}")
+            return {}
+
+    def _extract_member_details_from_modal(self, modal):
+        """
+        Helper to extract details from an open member modal.
+        """
+        try:
+            # 1. General Memo
+            general_memo = ""
+            if modal.locator("textarea[name='memo']").count() > 0:
+                general_memo = modal.locator("textarea[name='memo']").input_value()
+            
+            # 2. Education History
+            education_history = []
+            # User provided structure: input[name='date[]'] and input[name='comment[]']
+            # They are inside .form-inline divs.
+            # We can find all .form-inline that contain these inputs.
+            rows = modal.locator(".form-inline").all()
+            for row in rows:
+                date_input = row.locator("input[name='date[]']")
+                text_input = row.locator("input[name='comment[]']")
+                
+                if date_input.count() > 0 and text_input.count() > 0:
+                    date_val = date_input.input_value()
+                    text_val = text_input.input_value()
+                    
+                    if date_val and text_val:
+                        education_history.append({'date': date_val, 'content': text_val})
+                        
+            # 3. Photo
+            photo_data = ""
+            photo_img = modal.locator("img#photo_image")
+            if photo_img.count() == 0:
+                photo_img = modal.locator(".profile_img img")
+            
+            if photo_img.count() > 0:
+                src = photo_img.first.get_attribute("src")
+                if src:
+                    if "data:image" in src:
+                        photo_data = src.split(",")[1]
+                    else:
+                        try:
+                            photo_data = self.page.evaluate("""(img) => {
+                                var canvas = document.createElement("canvas");
+                                canvas.width = img.naturalWidth;
+                                canvas.height = img.naturalHeight;
+                                var ctx = canvas.getContext("2d");
+                                ctx.drawImage(img, 0, 0);
+                                var dataURL = canvas.toDataURL("image/png");
+                                return dataURL.split(',')[1];
+                            }""", photo_img.element_handle())
+                        except:
+                            photo_data = src 
+            
+            # 4. Product Name
+            product_name = ""
+            if modal.locator(".modify_goods_name").count() > 0:
+                product_name = modal.locator(".modify_goods_name").input_value()
+
+            return {
+                'general': general_memo,
+                'education': education_history,
+                'photo': photo_data,
+                'product': product_name
+            }
+        except Exception as e:
+            logging.error(f"Error in _extract_member_details_from_modal: {e}")
+            return {}
+
+
+
+    def get_daily_reservations(self):
+        logging.info("Fetching daily reservations (JS Mode)...")
+        missing_list = []
+        operation_time = ""
+        
+        # Create debug directory
+        debug_dir = os.path.join(os.path.dirname(os.path.abspath(sys.argv[0])), 'debug_screenshots')
+        os.makedirs(debug_dir, exist_ok=True)
+        
+        try:
+            # Navigate to Calendar if needed
+            if "calendar" not in self.page.url and "calender" not in self.page.url:
+                logging.info("Navigating to calendar...")
+                self.page.goto("https://sook0517.cafe24.com/index/calender")
+                self.page.wait_for_load_state("networkidle")
+
+            # Switch to Day View (Visual only, but good for consistency)
+            if self.page.locator(".fc-agendaDay-button").count() > 0:
+                self.page.click(".fc-agendaDay-button")
+                time.sleep(1)
+
+            # --- JS FETCHING ---
+            # Fetch all events from FullCalendar's internal state
+            logging.info("Fetching events from FullCalendar state...")
+            events_data = self.page.evaluate("""() => {
+                var cal = $('#calendar');
+                if (cal.length === 0) cal = $('.fc').parent();
+                
+                if (cal.length > 0 && cal.fullCalendar) {
+                    var events = cal.fullCalendar('clientEvents');
+                    return events.map(e => ({
+                        id: e._id || e.id,
+                        title: e.title,
+                        start: e.start ? e.start.format() : null,
+                        end: e.end ? e.end.format() : null,
+                        className: e.className
+                    }));
+                }
+                return [];
+            }""")
+            
+            logging.info(f"Raw JS Events found: {len(events_data)}")
+            print(f"DEBUG: Raw JS Events found: {len(events_data)}")
+            
+            today_str = datetime.datetime.now().strftime("%Y-%m-%d")
+            
+            # Filter for today
+            today_events = []
+            for e in events_data:
+                if e['start'] and e['start'].startswith(today_str):
+                    today_events.append(e)
+            
+            # Sort by start time
+            today_events.sort(key=lambda x: x['start'] if x['start'] else "")
+            
+            logging.info(f"Filtered Today's Events: {len(today_events)}")
+            print(f"DEBUG: Today's Events: {len(today_events)}")
+
+            for i, e in enumerate(today_events):
+                title = e['title']
+                e_id = e['id']
+                start_str = e['start']
+                end_str = e['end']
+                
+                print(f"DEBUG: Processing Event {i}: {title}")
+                
+                # 1. Operation Time Check
+                if '운영' in title:
+                    operation_time = title
+                    # Try to parse time from title if possible, or leave as title
+                    # If we want exact time from modal, we can open it, but title usually has it?
+                    # Let's try to parse from start/end if available
+                    if start_str and end_str:
+                        try:
+                            s_dt = datetime.datetime.fromisoformat(start_str)
+                            e_dt = datetime.datetime.fromisoformat(end_str)
+                            operation_time = f"{s_dt.strftime('%H:%M')} ~ {e_dt.strftime('%H:%M')}"
+                        except:
+                            pass
+                    continue
+
+                # 2. Name Parsing
+                clean_title = title.replace("\n", " ").strip()
+                tags_to_remove = ["[시간제]", "[미납]", "[보강]", "[예약]", "운영"]
+                for tag in tags_to_remove:
+                    clean_title = clean_title.replace(tag, "")
+                clean_title = re.sub(r"\d{1,2}:\d{2}\s*(-|~)?\s*(\d{1,2}:\d{2})?", "", clean_title)
+                
+                parts = clean_title.split()
+                name = ""
+                if parts:
+                    name = parts[0]
+                    if "/" in name:
+                        name = name.split("/")[0]
+                
+                if not name:
+                    continue
+
+                # 3. Duration Calculation (Directly from timestamps)
+                duration = 1.0
+                try:
+                    if start_str and end_str:
+                        s_dt = datetime.datetime.fromisoformat(start_str)
+                        e_dt = datetime.datetime.fromisoformat(end_str)
+                        duration = (e_dt - s_dt).total_seconds() / 3600
+                    else:
+                        # Fallback if end is missing (default 1h?)
+                        duration = 1.0
+                except Exception as err:
+                    logging.warning(f"Duration calc error: {err}")
+                    duration = 1.0
+
+                # 4. History Extraction (Requires Modal Interaction)
+                history = {}
+                try:
+                    # Find element to click
+                    # We can try to find the element by text or by some attribute if possible.
+                    # FullCalendar usually puts the title in .fc-title
+                    
+                    # Strategy: Use JS to find the element corresponding to this event and click it
+                    # Or find by text. Finding by text is risky if duplicates.
+                    # But we have the exact title from JS.
+                    
+                    logging.info(f"Opening modal for {name}...")
+                    
+                    # Try to click using JS trigger if we have ID, otherwise text match
+                    clicked = False
+                    
+                    # Attempt 1: Text match (most reliable if titles are unique enough)
+                    # We need to match the EXACT text visible in the calendar event
+                    # The visible text might be truncated or formatted.
+                    # Let's try to find an element containing the name.
+                    
+                    # Better: Use the internal ID if we can map it to DOM?
+                    # FullCalendar 2/3 doesn't always put ID in DOM.
+                    
+                    # Let's try clicking the event via JS using the clientEvents reference? No, need DOM element.
+                    # We will search for .fc-event containing the title.
+                    
+                    # Escape special chars in title for selector?
+                    # Just use text matching
+                    
+                    # We iterate all visible events and match title
+                    found_el = False
+                    visible_events = self.page.locator(".fc-event").all()
+                    for vel in visible_events:
+                        if title in vel.inner_text():
+                            vel.click(force=True)
+                            found_el = True
+                            break
+                    
+                    if not found_el:
+                        logging.warning(f"Could not find DOM element for event: {title}")
+                        # Fallback: Try searching by just name
+                        for vel in visible_events:
+                            if name in vel.inner_text():
+                                vel.click(force=True)
+                                found_el = True
+                                break
+                                
+                    if not found_el:
+                        logging.error(f"Failed to click event for {name}")
+                        # Save screenshot
+                        self.page.screenshot(path=os.path.join(debug_dir, f"fail_click_{name}.png"))
+                        continue
+
+                    # Wait for CalenderModalEdit
+                    modal_selector = "#CalenderModalEdit"
+                    self.page.wait_for_selector(modal_selector, state="visible", timeout=3000)
+                    
+                    # Open Member Modal
+                    try:
+                        self.page.evaluate("modMemberView()")
+                    except:
+                        modify_btn = self.page.locator("button:has-text('회원정보 수정')")
+                        if modify_btn.is_visible():
+                            modify_btn.click()
+                    
+                    member_modal_selector = "#modifyMemberModal"
+                    self.page.wait_for_selector(member_modal_selector, state="visible", timeout=5000)
+                    
+                    # Extract details
+                    member_modal = self.page.locator(member_modal_selector)
+                    history = self._extract_member_details_from_modal(member_modal)
+                    
+                    # Close Member Modal
+                    close_btn = member_modal.locator(".antoclose2, .close").first
+                    if close_btn.is_visible():
+                        close_btn.click()
+                    self.page.wait_for_selector(member_modal_selector, state="hidden", timeout=3000)
+                    
+                    # Close Calendar Modal
+                    cal_close_btn = self.page.locator(f"{modal_selector} .antoclose2").first
+                    if cal_close_btn.is_visible():
+                        cal_close_btn.click()
+                    self.page.wait_for_selector(modal_selector, state="hidden", timeout=3000)
+                    
+                except Exception as e:
+                    logging.error(f"Error extracting details for {name}: {e}")
+                    self.page.screenshot(path=os.path.join(debug_dir, f"error_{name}.png"))
+                    # Recovery
+                    try:
+                        self.page.evaluate("$('.modal').modal('hide')")
+                    except: pass
+
+                missing_list.append({
+                    'index': i,
+                    'name': name,
+                    'title': title,
+                    'duration': round(duration, 1),
+                    'date': today_str,
+                    'history': history,
+                    'photo': history.get('photo', '')
+                })
+
+        except Exception as e:
+            logging.error(f"Error fetching daily reservations: {e}")
+            import traceback
+            logging.error(traceback.format_exc())
+            
+        return missing_list, operation_time
+
+    def get_weekly_schedule(self, weeks=2):
+        """
+        Fetches schedule for the next `weeks` weeks.
+        Returns a list of event dictionaries.
+        """
+        logging.info(f"Fetching weekly schedule for {weeks} weeks...")
+        events_list = []
+        
+        try:
+            # Navigate to Calendar if needed
+            if "calendar" not in self.page.url and "calender" not in self.page.url:
+                self.page.goto("https://sook0517.cafe24.com/index/calender")
+                self.page.wait_for_load_state("networkidle")
+
+            # Switch to Month View to get enough data
+            # Standard FullCalendar class for month view
+            if self.page.locator(".fc-month-button").count() > 0:
+                self.page.click(".fc-month-button")
+                time.sleep(1) # Wait for render
+            
+            # Fetch events via JS
+            # We might need to fetch next month too if we are at the end of the month?
+            # FullCalendar 'clientEvents' usually returns everything in memory.
+            # If the view is month, it usually fetches that month.
+            # If we need next month, we might need to click 'next'.
+            
+            # Strategy: Fetch current view events. Check if we cover the range.
+            # If not, click next and fetch more?
+            # For simplicity, let's assume 'clientEvents' returns what's loaded.
+            # We will try to fetch, and if we need more, we navigate.
+            
+            # Actually, let's just fetch what is available.
+            
+            js_script = """() => {
+                var cal = $('#calendar');
+                if (cal.length === 0) cal = $('.fc').parent();
+                
+                if (cal.length > 0 && cal.fullCalendar) {
+                    var events = cal.fullCalendar('clientEvents');
+                    return events.map(e => ({
+                        id: e._id || e.id,
+                        title: e.title,
+                        start: e.start ? e.start.format() : null,
+                        end: e.end ? e.end.format() : null,
+                        className: e.className,
+                        description: e.description || ""
+                    }));
+                }
+                return [];
+            }"""
+            
+            raw_events = self.page.evaluate(js_script)
+            logging.info(f"Raw events fetched: {len(raw_events)}")
+            
+            # Filter for date range
+            today = datetime.datetime.now().date()
+            end_date = today + datetime.timedelta(weeks=weeks)
+            
+            for e in raw_events:
+                if not e['start']: continue
+                
+                # Parse start time
+                try:
+                    # ISO format or YYYY-MM-DD
+                    s_dt = datetime.datetime.fromisoformat(e['start'])
+                    s_date = s_dt.date()
+                    
+                    if today <= s_date <= end_date:
+                        events_list.append(e)
+                except:
+                    pass
+            
+            logging.info(f"Filtered events (2 weeks): {len(events_list)}")
+            
+        except Exception as e:
+            logging.error(f"Error fetching weekly schedule: {e}")
+            import traceback
+            logging.error(traceback.format_exc())
+            
+        return events_list
 
     def write_memo(self, event_index, text):
         logging.info(f"Writing memo for event index {event_index}: {text}")
@@ -860,7 +1205,13 @@ class ERPClient:
             # Find today's events again
             today_header = self.page.locator(".fc-day-header.fc-today")
             if today_header.count() == 0:
-                logging.error("Today's header not found.")
+                logging.warning("Today's header not found. Refreshing calendar page...")
+                self.page.goto("https://sook0517.cafe24.com/index/calender")
+                self.page.wait_for_load_state("networkidle")
+                today_header = self.page.locator(".fc-day-header.fc-today")
+                
+            if today_header.count() == 0:
+                logging.error("Today's header still not found after refresh.")
                 return False
 
             headers = self.page.locator(".fc-day-header")
@@ -947,48 +1298,78 @@ class ERPClient:
             # Ensure date input is focused and cleared before filling
             last_date_input.click()
             last_date_input.fill(today_str)
-            # Press Enter to confirm date (often needed for date pickers or validation)
             last_date_input.press("Enter")
-            # Also Tab to move focus away, triggering blur/change events
             last_date_input.press("Tab")
             
-            # Explicitly dispatch events to ensure the value is recognized by any framework (like jQuery/React/Vue)
+            # Explicitly dispatch events
             last_date_input.evaluate("el => { el.dispatchEvent(new Event('change', { bubbles: true })); el.dispatchEvent(new Event('blur', { bubbles: true })); }")
             
-            time.sleep(0.5) # Small pause to let UI update
+            time.sleep(0.5) 
 
+            # Fill Comment
+            logging.info(f"Filling comment: {text}")
+            last_comment_input.click()
             last_comment_input.fill(text)
-            last_comment_input.press("Tab") # Ensure comment is also committed
+            last_comment_input.press("Tab") # Ensure blur
             
-            # Handle potential alert dialogs on submission (e.g. "Saved successfully")
-            self.page.on("dialog", lambda dialog: dialog.accept())
-
-            # Click 'Modify' (Submit) button in member modal
-            logging.info("Submitting member modal...")
-            submit_btn = self.page.locator(f"{member_modal_selector} button.antosubmit")
-            submit_btn.scroll_into_view_if_needed()
+            # Click Save (Modify)
+            logging.info("Clicking save button...")
+            # Try finding the button by text '수정' or '저장' inside the modal footer or body
+            save_btn = self.page.locator(f"{member_modal_selector} button:has-text('수정')")
+            if save_btn.count() == 0:
+                 save_btn = self.page.locator(f"{member_modal_selector} button:has-text('저장')")
             
-            # Sometimes the submit button needs a moment or a force click
-            submit_btn.click(force=True)
+            if save_btn.count() > 0:
+                # Handle potential alert "수정되었습니다"
+                def handle_dialog(dialog):
+                    logging.info(f"Dialog on save: {dialog.message}")
+                    dialog.accept()
+                    
+                self.page.once("dialog", handle_dialog)
+                save_btn.first.click()
+            else:
+                logging.error("Save button not found.")
+                # Try fallback to .antosubmit if that's what they use
+                submit_btn = self.page.locator(f"{member_modal_selector} button.antosubmit")
+                if submit_btn.count() > 0:
+                    submit_btn.click()
+                else:
+                    return False
+                
+            # Wait for modal to close or explicitly close it
+            time.sleep(1)
             
-            # Wait for member modal to close
-            # If there's an alert, the dialog handler should catch it.
-            # We'll increase timeout just in case network is slow.
+            # Close member modal if still open
+            close_btn = self.page.locator(f"{member_modal_selector} .antoclose2")
+            if close_btn.count() == 0:
+                close_btn = self.page.locator(f"{member_modal_selector} .close")
+                
+            if self.page.is_visible(member_modal_selector):
+                if close_btn.count() > 0:
+                    logging.info("Closing member modal...")
+                    close_btn.first.click()
+                else:
+                    self.page.keyboard.press("Escape")
+            
             try:
-                self.page.wait_for_selector(member_modal_selector, state="hidden", timeout=10000)
+                self.page.wait_for_selector(member_modal_selector, state="hidden", timeout=5000)
             except:
-                logging.warning("Modal did not close automatically. Checking for alerts or errors.")
-                # If it didn't close, maybe we need to close it manually or check if it's still visible
-                if self.page.is_visible(member_modal_selector):
-                     logging.warning("Modal is still visible. Attempting to close manually or ignoring if save worked.")
-                     # It's possible the save worked but the modal didn't close (unlikely for this ERP but possible)
-                     # Or maybe the click didn't register.
-                     # Let's try clicking submit again if it's still there? No, might duplicate.
-                     # Let's just return True if we don't see an error, or False if we suspect failure.
-                     # For now, let's assume if we got here, it might have worked.
-                     pass
+                logging.warning("Member modal did not hide gracefully.")
 
-            logging.info("Memo written successfully via Member Modal.")
+            # Close calendar event modal if still open
+            cal_modal_selector = "#CalenderModalEdit"
+            if self.page.is_visible(cal_modal_selector):
+                logging.info("Closing calendar modal...")
+                cal_close = self.page.locator(f"{cal_modal_selector} .antoclose2")
+                if cal_close.count() > 0:
+                    cal_close.click()
+                else:
+                    self.page.keyboard.press("Escape")
+                try:
+                    self.page.wait_for_selector(cal_modal_selector, state="hidden", timeout=3000)
+                except:
+                    pass
+                
             return True
             
         except Exception as e:

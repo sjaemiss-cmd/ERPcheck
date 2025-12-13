@@ -1,1 +1,0 @@
-[{'text': '기기를 선택해주세요.', 'value': ''}, {'text': 'dobong-1', 'value': '20'}, {'text': 'dobong-2', 'value': '21'}, {'text': 'dobong-3', 'value': '22'}, {'text': 'dobong-4', 'value': '23'}, {'text': 'dobong-5', 'value': '24'}, {'text': 'dobong-6', 'value': '25'}, {'text': 'dobong-7', 'value': '26'}, {'text': 'dobong-8', 'value': '27'}, {'text': 'dobong-9', 'value': '28'}]
