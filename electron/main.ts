@@ -50,6 +50,17 @@ ipcMain.handle('settings:saveCredentials', (_event, creds) => {
     store.set('erp.id', creds.id)
     store.set('erp.password', creds.password)
     return true
+    return true
+})
+
+// Member Management Persistance
+ipcMain.handle('member:list', () => {
+    return store.get('members', [])
+})
+
+ipcMain.handle('member:save', (_, members) => {
+    store.set('members', members)
+    return true
 })
 
 ipcMain.removeHandler('settings:getCredentials')

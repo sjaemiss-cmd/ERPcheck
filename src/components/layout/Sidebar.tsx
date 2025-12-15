@@ -1,14 +1,15 @@
-import { Home, BookOpen, Calendar, Settings } from 'lucide-react'
+import { Home, BookOpen, Calendar, Settings, Users } from 'lucide-react'
 
 interface SidebarProps {
-    currentTab: 'dashboard' | 'education' | 'reservation' | 'settings'
-    onTabChange: (tab: 'dashboard' | 'education' | 'reservation' | 'settings') => void
+    currentTab: 'dashboard' | 'education' | 'reservation' | 'settings' | 'member'
+    onTabChange: (tab: 'dashboard' | 'education' | 'reservation' | 'settings' | 'member') => void
 }
 
 export function Sidebar({ currentTab, onTabChange }: SidebarProps) {
     const menuItems = [
         { id: 'dashboard' as const, label: '대시보드', icon: Home },
         { id: 'education' as const, label: '금일 교육', icon: BookOpen },
+        { id: 'member' as const, label: '회원 관리', icon: Users },
         { id: 'reservation' as const, label: '예약 수집', icon: Calendar },
         { id: 'settings' as const, label: '설정', icon: Settings },
     ]
@@ -25,8 +26,8 @@ export function Sidebar({ currentTab, onTabChange }: SidebarProps) {
                         key={item.id}
                         onClick={() => onTabChange(item.id)}
                         className={`w-full text-left px-4 py-3 rounded-lg transition-colors flex items-center space-x-3 ${currentTab === item.id
-                                ? 'bg-blue-600 text-white'
-                                : 'hover:bg-slate-700 text-slate-300'
+                            ? 'bg-blue-600 text-white'
+                            : 'hover:bg-slate-700 text-slate-300'
                             }`}
                     >
                         <item.icon size={20} />

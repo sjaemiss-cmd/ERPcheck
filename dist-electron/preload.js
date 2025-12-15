@@ -25,11 +25,16 @@ electron.contextBridge.exposeInMainWorld("api", {
     createReservation: (data) => electron.ipcRenderer.invoke("erp:createReservation", { data }),
     getTodayEducation: () => electron.ipcRenderer.invoke("erp:getTodayEducation"),
     getStudentDetail: (id) => electron.ipcRenderer.invoke("erp:getStudentDetail", { id }),
-    updateMemo: (id, memo, name, time) => electron.ipcRenderer.invoke("erp:updateMemo", { id, memo, name, time }),
+    updateMemo: (id, memo, name, time, date) => electron.ipcRenderer.invoke("erp:updateMemo", { id, memo, name, time, date }),
     writeMemosBatch: (memoList) => electron.ipcRenderer.invoke("erp:writeMemosBatch", { memoList }),
     deleteHistory: (id, history) => electron.ipcRenderer.invoke("erp:deleteHistory", { id, history }),
     updateHistory: (id, oldHistory, newHistory) => electron.ipcRenderer.invoke("erp:updateHistory", { id, oldHistory, newHistory }),
-    setHeadless: (headless) => electron.ipcRenderer.invoke("erp:setHeadless", { headless })
+    setHeadless: (headless) => electron.ipcRenderer.invoke("erp:setHeadless", { headless }),
+    fetchMembers: (options) => electron.ipcRenderer.invoke("erp:fetchMembers", options)
+  },
+  member: {
+    list: () => electron.ipcRenderer.invoke("member:list"),
+    save: (members) => electron.ipcRenderer.invoke("member:save", members)
   },
   scraper: {
     naverLogin: () => electron.ipcRenderer.invoke("scraper:naverLogin"),

@@ -30,12 +30,17 @@ contextBridge.exposeInMainWorld('api', {
         createReservation: (data: any) => ipcRenderer.invoke('erp:createReservation', { data }),
         getTodayEducation: () => ipcRenderer.invoke('erp:getTodayEducation'),
         getStudentDetail: (id: string) => ipcRenderer.invoke('erp:getStudentDetail', { id }),
-        updateMemo: (id: string, memo: string, name: string, time: string) => ipcRenderer.invoke('erp:updateMemo', { id, memo, name, time }),
-        writeMemosBatch: (memoList: { index: number; text: string; id: string; name: string; time: string }[]) =>
+        updateMemo: (id: string, memo: string, name: string, time: string, date?: string) => ipcRenderer.invoke('erp:updateMemo', { id, memo, name, time, date }),
+        writeMemosBatch: (memoList: { index: number; text: string; id: string; name: string; time: string; date?: string }[]) =>
             ipcRenderer.invoke('erp:writeMemosBatch', { memoList }),
         deleteHistory: (id: string, history: any) => ipcRenderer.invoke('erp:deleteHistory', { id, history }),
         updateHistory: (id: string, oldHistory: any, newHistory: any) => ipcRenderer.invoke('erp:updateHistory', { id, oldHistory, newHistory }),
         setHeadless: (headless: boolean) => ipcRenderer.invoke('erp:setHeadless', { headless }),
+        fetchMembers: (options?: { months: number }) => ipcRenderer.invoke('erp:fetchMembers', options),
+    },
+    member: {
+        list: () => ipcRenderer.invoke('member:list'),
+        save: (members: any[]) => ipcRenderer.invoke('member:save', members),
     },
     scraper: {
         naverLogin: () => ipcRenderer.invoke('scraper:naverLogin'),

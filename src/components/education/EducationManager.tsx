@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { cn } from '../../lib/utils'
-import { RefreshCw, Save, Square, Send, Pencil, Trash2, X, Check } from 'lucide-react'
+import { RefreshCw, Square, Send, Pencil, Trash2, X, Check, Plus } from 'lucide-react'
+import { useEducationStore } from '../../store/useEducationStore'
 
 interface Student {
     id: string
@@ -15,7 +16,7 @@ interface Student {
     index: number
 }
 
-
+// Helper to check if today is in history
 function hasTodayEducation(student: Student): boolean {
     if (!student.history || student.history.length === 0) return false
     const d = new Date()
@@ -27,17 +28,28 @@ function hasTodayEducation(student: Student): boolean {
 }
 
 export function EducationManager() {
-    const [students, setStudents] = useState<Student[]>([])
-    const [selectedId, setSelectedId] = useState<string | null>(null)
-    const [operationTime, setOperationTime] = useState('')
-    const [loading, setLoading] = useState(false)
-    const [drafts, setDrafts] = useState<Record<string, string>>({})
-    const [showBrowser, setShowBrowser] = useState(true)
-    const [isLoggedIn, setIsLoggedIn] = useState(false)
+    // Local UI state
     const [editingHistory, setEditingHistory] = useState<{ index: number; date: string; content: string } | null>(null)
+
+    // Global Store State
+    const {
+        students, setStudents,
+        selectedId, setSelectedId,
+        operationTime, setOperationTime,
+        loading, setLoading,
+        isLoggedIn, setIsLoggedIn,
+        showBrowser, setShowBrowser,
+        pendingHistory, setPendingHistory,
+        addPendingHistory,
+        updatePendingHistory,
+        deletePendingHistory
+    } = useEducationStore()
 
     // Sync browser visibility with backend
     useEffect(() => {
+        // Only call if changed or on mount? 
+        // Ideally we should sync this whenever the component mounts to ensure 
+        // backend state matches store state, or when store changes.
         window.api.erp.setHeadless(!showBrowser)
     }, [showBrowser])
 
@@ -47,7 +59,8 @@ export function EducationManager() {
         console.log('[EducationManager] fetchData called')
         setLoading(true)
         try {
-            // 자동 로그인 (고정 ID/PW)
+            // Auto Login - Only if not already tracked as logged in
+            // OR if we want to ensure session is alive.
             if (!isLoggedIn) {
                 console.log('[EducationManager] Auto login...')
                 const loginSuccess = await window.api.erp.login({ id: 'dobong', password: '1010' })
@@ -73,17 +86,23 @@ export function EducationManager() {
         }
     }
 
+    // Initial Fetch on Mount (ONLY if empty)
+    useEffect(() => {
+        if (students.length === 0) {
+            fetchData()
+        }
+    }, [])
+
     const handleStudentClick = async (student: Student) => {
         setSelectedId(student.id)
-        // history가 이미 있으면 추가 fetch 불필요
         if (!student.generalMemo && (!student.history || student.history.length === 0)) {
-            // Fetch details if missing
             try {
                 const details = await window.api.erp.getStudentDetail(student.id)
-                // 빈 데이터로 덮어쓰지 않도록 확인
                 if (details.generalMemo || (details.history && details.history.length > 0)) {
-                    setStudents(prev => prev.map(s =>
-                        s.id === student.id ? { ...s, ...details } : s
+                    // Note: setStudents in store expects specific type, casting if needed or ensuring type match
+                    // We need to pass a function to update specific student
+                    setStudents((prev) => prev.map(s =>
+                        s.id === student.id ? { ...s, ...details } as Student : s
                     ))
                 }
             } catch (e) {
@@ -92,63 +111,72 @@ export function EducationManager() {
         }
     }
 
-    const handleSaveDraft = () => {
-        if (!selectedId) return
-        // alert('임시 저장되었습니다.') // 흐름 끊김 방지
-        console.log('[EducationManager] Draft saved locally')
+    const handleAddHistory = () => {
+        if (!selectedId || !selectedStudent) return
+
+        const today = new Date().toISOString().split('T')[0]
+        const newItem = {
+            id: Date.now().toString(), // Temporary ID for React key
+            date: today,
+            content: `${selectedStudent.duration}/ `
+        }
+
+        addPendingHistory(selectedId, newItem)
     }
 
-    const handleSendMemo = async () => {
-        if (!selectedId || !drafts[selectedId] || !selectedStudent) return
-        try {
-            const success = await window.api.erp.updateMemo(selectedId, drafts[selectedId], selectedStudent.name, selectedStudent.time)
-            if (success) {
-                alert('전송 완료')
-            } else {
-                alert('전송 실패 (로그 확인 필요)')
-            }
-        } catch (e) {
-            console.error(e)
-            alert('전송 중 오류 발생')
-        }
+    const handlePendingChange = (tempId: string, field: 'date' | 'content', value: string) => {
+        if (!selectedId) return
+        updatePendingHistory(selectedId, tempId, field, value)
+    }
+
+    const handleDeletePending = (tempId: string) => {
+        if (!selectedId) return
+        deletePendingHistory(selectedId, tempId)
     }
 
     const handleSendAll = async () => {
-        // 작성된 메모가 있는 학생 필터링
-        const memoList = students
-            .map((s) => {
-                const text = drafts[s.id]
-                if (text && text.trim() && text.trim() !== `${s.duration}/`) {
-                    return { index: s.index, text: text.trim(), id: s.id, name: s.name, time: s.time }
-                }
-                return null
-            })
-            .filter((item): item is { index: number; text: string; id: string; name: string; time: string } => item !== null)
+        // Collect all pending items across all students
+        const allPendingItems: { index: number; text: string; id: string; name: string; time: string; date: string }[] = []
 
-        if (memoList.length === 0) {
+        students.forEach(s => {
+            const pending = pendingHistory[s.id]
+            if (pending && pending.length > 0) {
+                pending.forEach(p => {
+                    if (p.content.trim() && p.content.trim() !== `${s.duration}/`) {
+                        allPendingItems.push({
+                            index: s.index,
+                            text: p.content,
+                            id: s.id,
+                            name: s.name,
+                            time: s.time,
+                            date: p.date
+                        })
+                    }
+                })
+            }
+        })
+
+        if (allPendingItems.length === 0) {
             alert('전송할 내용이 없습니다.')
             return
         }
 
+        if (!confirm(`총 ${allPendingItems.length}건의 이력을 전송하시겠습니까?`)) return
+
         setLoading(true)
         try {
-            console.log('[EducationManager] Sending batch memos:', memoList)
-            const results = await window.api.erp.writeMemosBatch(memoList)
+            console.log('[EducationManager] Sending batch memos:', allPendingItems)
+            const results = await window.api.erp.writeMemosBatch(allPendingItems)
             console.log('[EducationManager] Batch results:', results)
 
-            // 결과 처리
-            const successCount = Object.values(results).filter(v => v).length
-            const failCount = Object.values(results).filter(v => !v).length
+            // Clear successful pending items
+            setPendingHistory({})
 
-            if (failCount === 0) {
-                alert(`${successCount}건 전송 완료!`)
-                // 성공한 학생들의 상태 업데이트
-                setStudents(prev => prev.map((s) =>
-                    results[s.index] ? { ...s, status: 'done' as const } : s
-                ))
-            } else {
-                alert(`${successCount}건 성공, ${failCount}건 실패`)
-            }
+            // Refresh Data
+            const data = await window.api.erp.getTodayEducation()
+            setStudents(data.students)
+
+            alert('전송 완료되었습니다.')
         } catch (e) {
             console.error('[EducationManager] Batch send error:', e)
             alert('전송 중 오류가 발생했습니다.')
@@ -157,20 +185,16 @@ export function EducationManager() {
         }
     }
 
-    const handleDraftChange = (text: string) => {
-        if (!selectedId) return
-        setDrafts(prev => ({ ...prev, [selectedId]: text }))
-    }
-
     const handleDeleteHistory = async (historyItem: { date: string, content: string }) => {
         if (!selectedStudent || !confirm('정말 삭제하시겠습니까?')) return
         setLoading(true)
         try {
-            // Use ID for robust matching
             const success = await window.api.erp.deleteHistory(selectedStudent.id, historyItem)
             if (success) {
                 alert('삭제되었습니다.')
-                fetchData() // Refresh to sync
+                // Force refresh to ensure data is in sync, store will update via setStudents inside fetchData
+                const data = await window.api.erp.getTodayEducation()
+                setStudents(data.students)
             } else {
                 alert('삭제 실패')
             }
@@ -188,13 +212,13 @@ export function EducationManager() {
         try {
             const oldItem = selectedStudent.history![editingHistory.index]
             const newItem = { date: editingHistory.date, content: editingHistory.content }
-
             const success = await window.api.erp.updateHistory(selectedStudent.id, oldItem, newItem)
-
             if (success) {
                 alert('수정되었습니다.')
                 setEditingHistory(null)
-                fetchData() // Refresh
+                // Force refresh
+                const data = await window.api.erp.getTodayEducation()
+                setStudents(data.students)
             } else {
                 alert('수정 실패')
             }
@@ -206,14 +230,6 @@ export function EducationManager() {
         }
     }
 
-    // Auto-prefix effect when selecting student
-    useEffect(() => {
-        if (selectedId && selectedStudent && !drafts[selectedId]) {
-            const prefix = `${selectedStudent.duration}/`
-            setDrafts(prev => ({ ...prev, [selectedId]: prefix }))
-        }
-    }, [selectedId])
-
     return (
         <div className="flex flex-col h-full bg-gray-100">
             {/* Header */}
@@ -221,7 +237,7 @@ export function EducationManager() {
                 <div className="flex items-center space-x-4">
                     <h2 className="text-xl font-bold text-gray-800">교육 관리</h2>
                     <span className="text-blue-600 font-bold">{operationTime}</span>
-                    <span className="text-sm text-gray-500">{loading ? '데이터 확인 중...' : isLoggedIn ? '로그인됨' : '로그인 필요'}</span>
+                    <span className="text-sm text-gray-500">{loading ? '작업 중...' : isLoggedIn ? '온라인' : '오프라인'}</span>
                 </div>
                 <div className="flex items-center space-x-3">
                     <label className="flex items-center space-x-2 text-sm text-gray-600 cursor-pointer">
@@ -241,6 +257,14 @@ export function EducationManager() {
                         <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
                         <span>새로고침</span>
                     </button>
+                    <button
+                        onClick={handleSendAll}
+                        disabled={loading}
+                        className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
+                    >
+                        <Send size={16} />
+                        <span>일괄 전송</span>
+                    </button>
                 </div>
             </div>
 
@@ -250,182 +274,163 @@ export function EducationManager() {
                 <div className="w-80 bg-white border-r border-gray-200 overflow-y-auto">
                     {students.length === 0 ? (
                         <div className="p-4 text-center text-gray-500">
-                            {loading ? '데이터 로딩 중...' : '데이터 새로고침을 눌러주세요'}
+                            {loading ? '데이터 로딩 중...' : '데이터 없음 (새로고침 필요)'}
                         </div>
                     ) : (
-                        students.map(student => (
-                            <div
-                                key={student.id}
-                                onClick={() => handleStudentClick(student)}
-                                className={cn(
-                                    "p-4 border-b border-gray-100 cursor-pointer transition-colors",
-                                    selectedId === student.id ? "bg-blue-50 border-l-4 border-l-blue-600" : "hover:bg-gray-50"
-                                )}
-                            >
-                                <div className="flex items-center justify-between">
-                                    <div className="flex items-center space-x-3">
-                                        <div className={cn(
-                                            "w-3 h-3 rounded-full",
-                                            (student.status === 'done' || hasTodayEducation(student)) ? "bg-green-500" : "bg-yellow-500"
-                                        )} />
-                                        <span className="font-medium text-gray-900">{student.name}</span>
+                        students.map(student => {
+                            const pendingCount = pendingHistory[student.id]?.length || 0
+                            return (
+                                <div
+                                    key={student.id}
+                                    onClick={() => handleStudentClick(student)}
+                                    className={cn(
+                                        "p-4 border-b border-gray-100 cursor-pointer transition-colors",
+                                        selectedId === student.id ? "bg-blue-50 border-l-4 border-l-blue-600" : "hover:bg-gray-50"
+                                    )}
+                                >
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center space-x-3">
+                                            <div className={cn(
+                                                "w-3 h-3 rounded-full",
+                                                (student.status === 'done' || hasTodayEducation(student)) ? "bg-green-500" : "bg-yellow-500"
+                                            )} />
+                                            <span className="font-medium text-gray-900">{student.name}</span>
+                                        </div>
+                                        <span className="text-sm text-gray-500">{student.time}</span>
                                     </div>
-                                    <span className="text-sm text-gray-500">{student.time}</span>
-                                </div>
-                                <div className="mt-1 text-xs text-gray-400">
-                                    {student.duration}시간
-                                </div>
-                                {drafts[student.id] && drafts[student.id] !== `${student.duration}/` && (
-                                    <div className="mt-2 text-xs text-blue-600 truncate">
-                                        ✏️ {drafts[student.id]}
+                                    <div className="mt-1 flex justify-between items-center">
+                                        <span className="text-xs text-gray-400">{student.duration}시간</span>
+                                        {pendingCount > 0 && (
+                                            <span className="text-xs font-bold text-blue-600">
+                                                +{pendingCount} 작성 중
+                                            </span>
+                                        )}
                                     </div>
-                                )}
-                            </div>
-                        ))
+                                </div>
+                            )
+                        })
                     )}
                 </div>
 
                 {/* Detail Panel */}
-                <div className="flex-1 flex flex-col overflow-hidden">
+                <div className="flex-1 flex flex-col overflow-hidden bg-gray-50">
                     {selectedStudent ? (
-                        <>
-                            {/* Student Info */}
-                            <div className="bg-white border-b border-gray-200 p-6">
-                                <div className="flex items-center justify-between">
-                                    <div>
-                                        <h3 className="text-2xl font-bold text-gray-900">{selectedStudent.name}</h3>
-                                        <p className="text-gray-500">{selectedStudent.time} • {selectedStudent.duration}시간</p>
-                                    </div>
-                                    <div className={cn(
-                                        "px-3 py-1 rounded-full text-sm font-medium",
-                                        (selectedStudent.status === 'done' || hasTodayEducation(selectedStudent))
-                                            ? "bg-green-100 text-green-800"
-                                            : "bg-yellow-100 text-yellow-800"
-                                    )}>
-                                        {(selectedStudent.status === 'done' || hasTodayEducation(selectedStudent)) ? '완료' : '대기'}
-                                    </div>
+                        <div className="flex-1 flex flex-col overflow-y-auto p-6">
+                            {/* Student Header */}
+                            <div className="bg-white p-6 rounded-xl shadow-sm mb-6">
+                                <h3 className="text-2xl font-bold text-gray-900">{selectedStudent.name}</h3>
+                                <div className="flex items-center space-x-2 mt-2 text-gray-500">
+                                    <span>{selectedStudent.time}</span>
+                                    <span>•</span>
+                                    <span>{selectedStudent.duration}시간 과정</span>
                                 </div>
-
-                                {/* General Memo */}
                                 {selectedStudent.generalMemo && (
-                                    <div className="mt-4 p-3 bg-gray-50 rounded-lg">
-                                        <p className="text-sm text-gray-600">{selectedStudent.generalMemo}</p>
+                                    <div className="mt-4 p-3 bg-gray-50 rounded-lg text-sm text-gray-600">
+                                        {selectedStudent.generalMemo}
                                     </div>
                                 )}
                             </div>
 
-                            {/* History */}
-                            <div className="flex-1 overflow-y-auto p-6 bg-gray-50">
-                                <h4 className="text-lg font-semibold text-gray-800 mb-4">교육 이력</h4>
-                                {selectedStudent.history && selectedStudent.history.length > 0 ? (
-                                    <div className="space-y-3">
-                                        {selectedStudent.history.map((h, i) => (
-                                            <div key={i} className="bg-white p-4 rounded-lg shadow-sm border border-gray-100 group">
-                                                {editingHistory?.index === i ? (
-                                                    <div className="space-y-2">
-                                                        <input
-                                                            type="text"
-                                                            value={editingHistory.date}
-                                                            onChange={e => setEditingHistory({ ...editingHistory, date: e.target.value })}
-                                                            className="w-full text-sm border rounded px-2 py-1"
-                                                        />
-                                                        <input
-                                                            type="text"
-                                                            value={editingHistory.content}
-                                                            onChange={e => setEditingHistory({ ...editingHistory, content: e.target.value })}
-                                                            className="w-full border rounded px-2 py-1"
-                                                        />
-                                                        <div className="flex justify-end space-x-2 mt-2">
-                                                            <button
-                                                                onClick={() => setEditingHistory(null)}
-                                                                className="p-1 text-gray-500 hover:bg-gray-100 rounded"
-                                                            >
-                                                                <X size={16} />
-                                                            </button>
-                                                            <button
-                                                                onClick={handleUpdateHistory}
-                                                                className="p-1 text-green-600 hover:bg-green-50 rounded"
-                                                            >
-                                                                <Check size={16} />
-                                                            </button>
-                                                        </div>
-                                                    </div>
-                                                ) : (
-                                                    <div className="flex justify-between items-start">
-                                                        <div>
-                                                            <div className="text-sm text-gray-500 mb-1">{h.date}</div>
-                                                            <div className="text-gray-800">{h.content}</div>
-                                                        </div>
-                                                        <div className="flex space-x-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
-                                                            <button
-                                                                onClick={() => setEditingHistory({ index: i, date: h.date, content: h.content })}
-                                                                className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded"
-                                                            >
-                                                                <Pencil size={14} />
-                                                            </button>
-                                                            <button
-                                                                onClick={() => handleDeleteHistory(h)}
-                                                                className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"
-                                                            >
-                                                                <Trash2 size={14} />
-                                                            </button>
-                                                        </div>
-                                                    </div>
-                                                )}
+                            {/* History List */}
+                            <div className="space-y-4 mb-6">
+                                <h4 className="font-bold text-gray-700 flex items-center">
+                                    <span className="mr-2">교육 이력</span>
+                                    <span className="text-sm font-normal text-gray-400">({selectedStudent.history?.length || 0}건)</span>
+                                </h4>
+
+                                {/* Existing History */}
+                                {selectedStudent.history?.map((h, i) => (
+                                    <div key={i} className="bg-white p-4 rounded-lg shadow-sm border border-gray-100 group">
+                                        {editingHistory?.index === i ? (
+                                            <div className="space-y-3">
+                                                <input
+                                                    type="date"
+                                                    value={editingHistory.date}
+                                                    onChange={e => setEditingHistory({ ...editingHistory, date: e.target.value })}
+                                                    className="block w-full text-sm border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                                                />
+                                                <input
+                                                    type="text"
+                                                    value={editingHistory.content}
+                                                    onChange={e => setEditingHistory({ ...editingHistory, content: e.target.value })}
+                                                    className="block w-full border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                                                />
+                                                <div className="flex justify-end space-x-2">
+                                                    <button onClick={() => setEditingHistory(null)} className="p-2 text-gray-500 hover:bg-gray-100 rounded">
+                                                        <X size={16} />
+                                                    </button>
+                                                    <button onClick={handleUpdateHistory} className="p-2 text-green-600 hover:bg-green-50 rounded">
+                                                        <Check size={16} />
+                                                    </button>
+                                                </div>
                                             </div>
-                                        ))}
+                                        ) : (
+                                            <div className="flex justify-between items-start">
+                                                <div>
+                                                    <div className="text-sm font-medium text-blue-600 mb-1">{h.date}</div>
+                                                    <div className="text-gray-800">{h.content}</div>
+                                                </div>
+                                                <div className="flex space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                    <button onClick={() => setEditingHistory({ index: i, date: h.date, content: h.content })} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded">
+                                                        <Pencil size={14} />
+                                                    </button>
+                                                    <button onClick={() => handleDeleteHistory(h)} className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded">
+                                                        <Trash2 size={14} />
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
-                                ) : (
-                                    <p className="text-gray-500">이력이 없습니다.</p>
-                                )}
+                                ))}
+
+                                {/* Pending History (Drafts) */}
+                                {pendingHistory[selectedStudent.id]?.map((item) => (
+                                    <div key={item.id} className="bg-blue-50 p-4 rounded-lg border border-blue-100 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                                        <div className="flex justify-between items-start mb-2">
+                                            <span className="text-xs font-bold text-blue-600 uppercase tracking-wider">New Draft</span>
+                                            <button onClick={() => handleDeletePending(item.id)} className="text-gray-400 hover:text-red-500">
+                                                <X size={14} />
+                                            </button>
+                                        </div>
+                                        <div className="space-y-2">
+                                            <input
+                                                type="date"
+                                                value={item.date}
+                                                onChange={(e) => handlePendingChange(item.id, 'date', e.target.value)}
+                                                className="block w-full text-sm border-gray-300 rounded bg-white focus:ring-blue-500 focus:border-blue-500"
+                                            />
+                                            <input
+                                                type="text"
+                                                value={item.content}
+                                                onChange={(e) => handlePendingChange(item.id, 'content', e.target.value)}
+                                                placeholder="교육 내용을 입력하세요..."
+                                                className="block w-full border-gray-300 rounded bg-white focus:ring-blue-500 focus:border-blue-500"
+                                                autoFocus
+                                            />
+                                        </div>
+                                    </div>
+                                ))}
                             </div>
 
-                            {/* Memo Input */}
-                            <div className="bg-white border-t border-gray-200 p-4">
-                                <div className="flex space-x-3">
-                                    <input
-                                        type="text"
-                                        value={drafts[selectedStudent.id] || ''}
-                                        onChange={e => handleDraftChange(e.target.value)}
-                                        placeholder={`${selectedStudent.duration}/ 교육 내용 입력...`}
-                                        className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                    />
-                                    <button
-                                        onClick={handleSaveDraft}
-                                        className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
-                                    >
-                                        <Save size={18} />
-                                    </button>
-                                    <button
-                                        onClick={handleSendMemo}
-                                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                                    >
-                                        <Send size={18} />
-                                    </button>
-                                </div>
-                            </div>
-                        </>
+                            {/* Add Button */}
+                            <button
+                                onClick={handleAddHistory}
+                                className="w-full py-3 border-2 border-dashed border-gray-300 rounded-xl text-gray-500 hover:border-blue-500 hover:text-blue-600 hover:bg-blue-50 transition-all flex items-center justify-center space-x-2 font-medium"
+                            >
+                                <Plus size={20} />
+                                <span>교육 이력 추가</span>
+                            </button>
+
+                        </div>
                     ) : (
                         <div className="flex-1 flex items-center justify-center text-gray-500">
                             <div className="text-center">
                                 <Square size={48} className="mx-auto mb-4 text-gray-300" />
-                                <p>학생을 선택하세요</p>
+                                <p>학생을 선택하여 교육 이력을 관리하세요</p>
                             </div>
                         </div>
                     )}
                 </div>
-            </div>
-
-            {/* Footer */}
-            <div className="bg-white border-t border-gray-200 p-4 flex justify-end">
-                <button
-                    onClick={handleSendAll}
-                    disabled={loading}
-                    className="bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition-colors font-bold flex items-center space-x-2 shadow-sm disabled:opacity-50"
-                >
-                    <Send size={18} />
-                    <span>{loading ? '전송 중...' : '일괄 전송'}</span>
-                </button>
             </div>
         </div>
     )
