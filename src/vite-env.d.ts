@@ -4,7 +4,7 @@ interface Window {
     api: {
         erp: {
             login: (credentials: { id: string; password: string }) => Promise<boolean>
-            getSchedule: (weeks: number) => Promise<any[]>
+            getSchedule: (startDate: string, endDate: string) => Promise<any[]>
             createReservation: (data: any) => Promise<boolean>
             getTodayEducation: () => Promise<{ operationTime: string; students: { id: string; name: string; time: string; duration: number; status: 'pending' | 'done'; type: string; generalMemo?: string; history?: { date: string; content: string }[]; index: number }[] }>
             getStudentDetail: (id: string) => Promise<{ generalMemo: string; history: any[] }>

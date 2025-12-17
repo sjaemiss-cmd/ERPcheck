@@ -1,3 +1,0 @@
----START HTML---
-<a class="fc-time-grid-event fc-v-event fc-event fc-start fc-end bg_blue device4" style="inset: 119.5px auto -839.5px 33.3333%; z-index: 1; width: 11.1111%;"><div class="fc-content"><div class="fc-time" data-start="09:00" data-full="9:00 AM"><span>09:00</span></div><div class="fc-title">운영 <p class="text_red"></p></div></div><div class="fc-bg"></div></a>
----END HTML---

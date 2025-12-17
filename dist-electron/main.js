@@ -24699,16 +24699,13 @@ class ErpService {
   constructor() {
     __publicField(this, "browser", null);
     __publicField(this, "page", null);
-    __publicField(this, "isHeadless", false);
+    __publicField(this, "isHeadless", true);
     __publicField(this, "isBusy", false);
     this.registerIpcHandlers();
   }
   registerIpcHandlers() {
     require$$1$2.ipcMain.handle("erp:login", async (_, { id: id2, password }) => {
       return await this.login(id2, password);
-    });
-    require$$1$2.ipcMain.handle("erp:getSchedule", async (_, { weeks }) => {
-      return await this.getWeeklySchedule(weeks);
     });
     require$$1$2.ipcMain.handle("erp:createReservation", async (_, { data: data2 }) => {
       return await this.createReservation(data2);
@@ -24732,12 +24729,20 @@ class ErpService {
       return await this.updateHistory(id2, oldHistory, newHistory);
     });
     require$$1$2.ipcMain.handle("erp:setHeadless", async (_, { headless }) => {
-      this.isHeadless = headless;
-      console.log(`[ErpService] Headless mode set to: ${headless}`);
+      if (this.isHeadless !== headless) {
+        this.isHeadless = headless;
+        console.log(`[ErpService] Headless mode set to: ${headless}`);
+        if (this.browser && !this.isBusy) {
+          console.log("[ErpService] Restarting browser to apply headless setting...");
+          await this.browser.close().catch((e) => console.error("Error closing browser:", e));
+          this.browser = null;
+          this.page = null;
+        }
+      }
       return true;
     });
-    require$$1$2.ipcMain.handle("erp:fetchMembers", async (_, options) => {
-      return await this.fetchMembers((options == null ? void 0 : options.months) || 6);
+    require$$1$2.ipcMain.handle("erp:getSchedule", async (_, { startDate, endDate }) => {
+      return await this.getSchedule(startDate, endDate);
     });
   }
   async start() {
@@ -25161,155 +25166,6 @@ class ErpService {
       return results;
     }
   }
-  async getWeeklySchedule(_weeks = 2) {
-    return [];
-  }
-  async fetchMembers(months = 6) {
-    console.log(`[ErpService] fetchMembers called (Last ${months} months)`);
-    if (this.isBusy) {
-      console.warn("[ErpService] Service is busy");
-      return [];
-    }
-    this.isBusy = true;
-    try {
-      await this.start();
-      if (!this.page) {
-        this.isBusy = false;
-        return [];
-      }
-      const loginSuccess = await this.login("dobong", "1010");
-      if (!loginSuccess) {
-        console.error("[ErpService] Login failed during fetchMembers");
-        this.isBusy = false;
-        return [];
-      }
-      const page = this.page;
-      const BASE_URL = "http://sook0517.cafe24.com";
-      console.log("[ErpService] Navigating to Member list...");
-      await page.goto(`${BASE_URL}/index/member`, { waitUntil: "domcontentloaded" });
-      try {
-        const endDate = /* @__PURE__ */ new Date();
-        const startDate = /* @__PURE__ */ new Date();
-        startDate.setMonth(endDate.getMonth() - months);
-        const startDateStr = startDate.toISOString().split("T")[0];
-        const endDateStr = endDate.toISOString().split("T")[0];
-        console.log(`[ErpService] Filtering members from ${startDateStr} to ${endDateStr}`);
-        const sdateInput = page.locator('input[name="sdate"]').or(page.locator('input[name="start_date"]'));
-        if (await sdateInput.count() > 0) {
-          await sdateInput.first().fill(startDateStr);
-          const edateInput = page.locator('input[name="edate"]').or(page.locator('input[name="end_date"]'));
-          if (await edateInput.count() > 0) await edateInput.first().fill(endDateStr);
-          await page.click('button[type="submit"], input[type="submit"], .btn-search');
-          await page.waitForTimeout(1e3);
-        } else {
-          console.warn("[ErpService] Date filter inputs not found. Scraping default view.");
-        }
-      } catch (e) {
-        console.warn("[ErpService] Error setting date filter:", e);
-      }
-      const members = [];
-      let hasNextPage = true;
-      let pageNum = 1;
-      const MAX_PAGES = 50;
-      while (hasNextPage && pageNum <= MAX_PAGES) {
-        console.log(`[ErpService] Scraping page ${pageNum}...`);
-        await page.waitForSelector("table.table", { timeout: 5e3 }).catch(() => null);
-        const pageMembers = await page.evaluate(() => {
-          const rows = Array.from(document.querySelectorAll("table.table tbody tr"));
-          return rows.map((row) => {
-            var _a2;
-            const cols = row.querySelectorAll("td");
-            if (cols.length < 5) return null;
-            const getCleanText = (el) => {
-              var _a3;
-              if (!el) return "";
-              const clone2 = el.cloneNode(true);
-              const garbage = clone2.querySelectorAll('.modal, .hidden, script, style, [style*="display: none"], div[id*="Modal"]');
-              garbage.forEach((g) => g.remove());
-              return ((_a3 = clone2.textContent) == null ? void 0 : _a3.trim()) || "";
-            };
-            const textContent2 = Array.from(cols).map((c) => getCleanText(c));
-            const phoneIdx = textContent2.findIndex((t2) => /01[016789]-?\d{3,4}-?\d{4}/.test(t2));
-            const phone = phoneIdx !== -1 ? textContent2[phoneIdx] : "";
-            let name = "";
-            if (phoneIdx > 0) {
-              const nameCell = cols[phoneIdx - 1];
-              const link2 = nameCell.querySelector("a");
-              if (link2 && ((_a2 = link2.textContent) == null ? void 0 : _a2.trim())) {
-                name = link2.textContent.trim();
-              } else {
-                name = getCleanText(nameCell);
-              }
-              name = name.split("\n")[0].trim();
-              if (name.includes("회원 수정")) {
-                const parts = name.split(" ");
-                if (parts.length > 0) name = parts[0];
-              }
-            }
-            const dateIdx = textContent2.findIndex((t2) => /^\d{4}-\d{2}-\d{2}$/.test(t2));
-            const date = dateIdx !== -1 ? textContent2[dateIdx] : "";
-            const statusText = textContent2[textContent2.length - 1];
-            const statusStr = statusText || "";
-            const status = statusStr.includes("탈퇴") || statusStr.includes("정지") ? "inactive" : "active";
-            let id2 = Math.random().toString(36).substr(2, 9);
-            const link = row.querySelector('a[href*="idx="]');
-            if (link) {
-              const href = link.getAttribute("href");
-              const match = href == null ? void 0 : href.match(/idx=(\d+)/);
-              if (match) id2 = match[1];
-            }
-            if (!name || !phone) return null;
-            return {
-              id: id2,
-              name,
-              phone,
-              registerDate: date,
-              status,
-              memo: ""
-              // Details require separate fetch
-            };
-          }).filter(Boolean);
-        });
-        if (pageMembers.length === 0) {
-          console.log("[ErpService] No members found on this page. Stopping.");
-          break;
-        }
-        members.push(...pageMembers);
-        try {
-          const foundNext = await page.evaluate(() => {
-            const links = Array.from(document.querySelectorAll(".pagination a, .paging a, a"));
-            const nextLink = links.find(
-              (a) => {
-                var _a2, _b;
-                return ((_a2 = a.textContent) == null ? void 0 : _a2.trim()) === ">" || ((_b = a.textContent) == null ? void 0 : _b.trim()) === "Next" || a.classList.contains("next") || a.querySelector('img[alt="Next"]') || a.querySelector('img[src*="next"]');
-              }
-            );
-            if (nextLink) {
-              nextLink.click();
-              return true;
-            }
-            return false;
-          });
-          if (foundNext) {
-            await page.waitForTimeout(2e3);
-            pageNum++;
-          } else {
-            hasNextPage = false;
-          }
-        } catch (e) {
-          console.log("[ErpService] Pagination error:", e);
-          hasNextPage = false;
-        }
-      }
-      console.log(`[ErpService] Fetched ${members.length} members total.`);
-      this.isBusy = false;
-      return members;
-    } catch (e) {
-      console.error("[ErpService] Error fetching members:", e);
-      this.isBusy = false;
-      return [];
-    }
-  }
   async _modifyHistoryCore(eventId, targetHistory, action, newHistory) {
     var _a2;
     console.log(`[ErpService] _modifyHistoryCore: ${action} for ID ${eventId}`);
@@ -25625,18 +25481,82 @@ class ErpService {
       return false;
     }
   }
+  async getSchedule(startDate, endDate) {
+    console.log(`[ErpService] getSchedule called from ${startDate} to ${endDate}`);
+    if (!this.browser) await this.start();
+    if (!this.page) return [];
+    const page = this.page;
+    try {
+      if (!page.url().includes("/index/calender")) {
+        await this.login("dobong", "1010");
+        await page.waitForTimeout(1e3);
+        if (!page.url().includes("/index/calender")) {
+          await page.goto("http://sook0517.cafe24.com/index/calender");
+        }
+      }
+      const start = new Date(startDate);
+      const end2 = new Date(endDate);
+      const events = [];
+      let current = new Date(start);
+      while (current <= end2) {
+        const dateStr = current.toISOString().split("T")[0];
+        console.log(`[ErpService] Loading month for ${dateStr}`);
+        await page.evaluate((d) => {
+          $("#calendar").fullCalendar("changeView", "month");
+          $("#calendar").fullCalendar("gotoDate", d);
+        }, dateStr);
+        await page.waitForTimeout(1e3);
+        const monthEvents = await page.evaluate(() => {
+          const rawEvents = $("#calendar").fullCalendar("clientEvents");
+          return rawEvents.map((e) => ({
+            id: e.id,
+            title: e.title,
+            start: e.start ? e.start.format() : null,
+            end: e.end ? e.end.format() : null,
+            className: e.className
+          }));
+        });
+        events.push(...monthEvents);
+        current.setMonth(current.getMonth() + 1);
+      }
+      const uniqueEvents = Array.from(new Map(events.map((item) => [item.id, item])).values());
+      console.log(`[ErpService] Fetched ${uniqueEvents.length} unique events`);
+      return uniqueEvents;
+    } catch (e) {
+      console.error("[ErpService] getSchedule error:", e);
+      return [];
+    }
+  }
 }
 class ScraperService {
   constructor() {
     __publicField(this, "browser", null);
     __publicField(this, "page", null);
   }
+  async start() {
+    if (this.browser && !this.browser.isConnected()) {
+      this.browser = null;
+      this.page = null;
+    }
+    if (this.page && this.page.isClosed()) {
+      this.page = null;
+    }
+    if (!this.browser) {
+      this.browser = await playwright.chromium.launch({ headless: false });
+      this.browser.on("disconnected", () => {
+        console.log("[ScraperService] Browser disconnected");
+        this.browser = null;
+        this.page = null;
+      });
+      this.page = await this.browser.newPage();
+    } else if (!this.page) {
+      this.page = await this.browser.newPage();
+    }
+  }
   async naverLogin() {
     try {
-      if (!this.browser) {
-        this.browser = await playwright.chromium.launch({ headless: false });
-        this.page = await this.browser.newPage();
-      }
+      await this.start();
+      if (!this.page) return false;
       await this.page.goto("https://nid.naver.com/nidlogin.login");
       console.log("[ScraperService] Please login to Naver manually...");
       return true;
@@ -25647,10 +25567,8 @@ class ScraperService {
   }
   async kakaoLogin() {
     try {
-      if (!this.browser) {
-        this.browser = await playwright.chromium.launch({ headless: false });
-        this.page = await this.browser.newPage();
-      }
+      await this.start();
+      if (!this.page) return false;
       await this.page.goto("https://accounts.kakao.com/login");
       console.log("[ScraperService] Please login to Kakao manually...");
       return true;
@@ -25662,10 +25580,7 @@ class ScraperService {
   async getNaverBookings() {
     console.log("[ScraperService] getNaverBookings called");
     try {
-      if (!this.browser) {
-        this.browser = await playwright.chromium.launch({ headless: false });
-        this.page = await this.browser.newPage();
-      }
+      await this.start();
       if (!this.page) return [];
       const page = this.page;
       await page.goto("https://partner.booking.naver.com/bizes/697059/booking-list-view", { waitUntil: "domcontentloaded" });
@@ -25728,10 +25643,7 @@ class ScraperService {
   async getKakaoBookings() {
     console.log("[ScraperService] getKakaoBookings called");
     try {
-      if (!this.browser) {
-        this.browser = await playwright.chromium.launch({ headless: false });
-        this.page = await this.browser.newPage();
-      }
+      await this.start();
       if (!this.page) return [];
       const page = this.page;
       await page.goto("https://business.kakao.com/_hxlxnIs/chats", { waitUntil: "domcontentloaded" });
@@ -40676,7 +40588,6 @@ function createWindow() {
   });
   if (process.env.NODE_ENV === "development" || !require$$1$2.app.isPackaged) {
     mainWindow.loadURL("http://localhost:5173");
-    mainWindow.webContents.openDevTools();
   } else {
     mainWindow.loadFile(require$$0$3.join(__dirname, "../dist/index.html"));
   }

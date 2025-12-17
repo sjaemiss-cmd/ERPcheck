@@ -31,17 +31,4 @@ export interface DailyData {
     students: Student[]
 }
 
-export interface Member {
-    id: string
-    name: string
-    phone: string
-    status: 'active' | 'inactive' | 'deleted'
-    registerDate: string
-    memo?: string
-    birthDate?: string
-    courseType?: string
-}
 
-export interface FetchMemberOptions {
-    months?: number // Default 6
-}

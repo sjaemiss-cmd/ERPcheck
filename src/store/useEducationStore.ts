@@ -43,7 +43,7 @@ export const useEducationStore = create<EducationState>((set) => ({
     operationTime: '',
     loading: false,
     isLoggedIn: false,
-    showBrowser: true,
+    showBrowser: false,
     pendingHistory: {},
 
     setStudents: (students) => set((state) => ({

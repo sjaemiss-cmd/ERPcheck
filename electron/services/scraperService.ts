@@ -4,14 +4,35 @@ export class ScraperService {
     private browser: Browser | null = null
     private page: Page | null = null
 
+    async start() {
+        if (this.browser && !this.browser.isConnected()) {
+            this.browser = null
+            this.page = null
+        }
+        if (this.page && this.page.isClosed()) {
+            this.page = null
+        }
+
+        if (!this.browser) {
+            this.browser = await chromium.launch({ headless: false })
+            this.browser.on('disconnected', () => {
+                console.log('[ScraperService] Browser disconnected')
+                this.browser = null
+                this.page = null
+            })
+            this.page = await this.browser.newPage()
+        } else if (!this.page) {
+            this.page = await this.browser.newPage()
+        }
+    }
+
     async naverLogin(): Promise<boolean> {
         try {
-            if (!this.browser) {
-                this.browser = await chromium.launch({ headless: false })
-                this.page = await this.browser.newPage()
-            }
+            await this.start()
+            if (!this.page) return false
+
             // Navigate to Naver login
-            await this.page!.goto('https://nid.naver.com/nidlogin.login')
+            await this.page.goto('https://nid.naver.com/nidlogin.login')
             // Wait for manual login
             console.log('[ScraperService] Please login to Naver manually...')
             return true
@@ -23,11 +44,10 @@ export class ScraperService {
 
     async kakaoLogin(): Promise<boolean> {
         try {
-            if (!this.browser) {
-                this.browser = await chromium.launch({ headless: false })
-                this.page = await this.browser.newPage()
-            }
-            await this.page!.goto('https://accounts.kakao.com/login')
+            await this.start()
+            if (!this.page) return false
+
+            await this.page.goto('https://accounts.kakao.com/login')
             console.log('[ScraperService] Please login to Kakao manually...')
             return true
         } catch (e) {
@@ -39,12 +59,7 @@ export class ScraperService {
     async getNaverBookings(): Promise<any[]> {
         console.log('[ScraperService] getNaverBookings called')
         try {
-            if (!this.browser) {
-                // If browser not open, launch it (user should have logged in previously or will login now)
-                // But generally users click 'Login' first.
-                this.browser = await chromium.launch({ headless: false })
-                this.page = await this.browser.newPage()
-            }
+            await this.start()
             if (!this.page) return []
 
             const page = this.page
@@ -134,10 +149,7 @@ export class ScraperService {
     async getKakaoBookings(): Promise<any[]> {
         console.log('[ScraperService] getKakaoBookings called')
         try {
-            if (!this.browser) {
-                this.browser = await chromium.launch({ headless: false })
-                this.page = await this.browser.newPage()
-            }
+            await this.start()
             if (!this.page) return []
 
             const page = this.page
