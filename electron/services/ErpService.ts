@@ -852,20 +852,125 @@ export class ErpService {
         }
     }
 
+    /**
+     * Maps Naver Booking Data to ERP Format and creates reservation.
+     * Implements logic from docs/NAVER_TO_ERP_MAPPING.md
+     */
+    async registerToErp(naverBooking: any, dryRun: boolean = false): Promise<boolean> {
+        console.log(`[ErpService] registerToErp processing: ${naverBooking.user_name} (DryRun: ${dryRun})`);
+
+        // 1. Parse Date ("2025. 12. 18.(목) 오전 11:30")
+        const dateMatch = naverBooking.date_string.match(/(\d{4})\. (\d{1,2})\. (\d{1,2})/);
+        if (!dateMatch) {
+            console.error('[ErpService] Invalid date format:', naverBooking.date_string);
+            return false;
+        }
+        const date = `${dateMatch[1]}-${dateMatch[2].padStart(2, '0')}-${dateMatch[3].padStart(2, '0')}`;
+
+        // 2. Parse Time ("오전 11:30", "오후 12:30", "오후 1:00")
+        let timeStr = naverBooking.date_string.split(') ')[1] || ''; // "오전 11:30"
+        timeStr = timeStr.trim();
+
+        // Remove trailing texts if any
+        if (timeStr.includes('(')) timeStr = timeStr.split('(')[0].trim();
+
+        let [ampm, clock] = timeStr.split(' ');
+        if (!clock && ampm.includes(':')) {
+            clock = ampm;
+            ampm = "오전"; // default/fallback
+        }
+
+        let [hour, minute] = (clock || "09:00").split(':').map(Number);
+
+        if (ampm === '오후' && hour < 12) hour += 12;
+        if (ampm === '오전' && hour === 12) hour = 0; // 12 AM
+
+        const startTime = `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+
+        // Calculate End Time (Default 1 hour)
+        let endHour = hour + 1;
+        let endTime = `${String(endHour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+
+        // 3. Map Product/Options to Goods ID
+        // 3. Map Product/Options to Goods ID
+        let goodsIdx = "6268"; // Default (fallback)
+        const p = naverBooking.product || '';
+        const o = naverBooking.options || '';
+        const full = (p + o).replace(/\s/g, '');
+
+        console.log(`[ErpService] Mapping - Product: "${p}", Option: "${o}"`);
+
+        // Mapping Logic based on mapping.csv
+        if (p.includes('이용문의') || p.includes('상담')) {
+            // 1,2종 면허취득 및 장롱면허 이용문의 -> NONE
+            goodsIdx = "NONE";
+        } else if (p.includes('체험권') && o.includes('2종자동')) {
+            goodsIdx = "6236";
+        } else if (o.includes('1종자동') && o.includes('기능') && o.includes('도로')) {
+            goodsIdx = "6226"; // 1종자동(기능+도로)
+        } else if (o.includes('1종수동') && o.includes('기능') && o.includes('도로')) {
+            goodsIdx = "6229"; // 1종수동(기능+도로)
+        } else if (o === '1종자동' || full.includes('1종자동')) {
+            // Strictly just 1종자동 (if not caught above)
+            goodsIdx = "6240";
+        } else if (o === '1종수동' || full.includes('1종수동')) {
+            goodsIdx = "6244";
+        } else if (p.includes('합격무제한') || o.includes('2종(기능+도로)')) {
+            goodsIdx = "6223";
+        } else if (o.includes('1종') && o.includes('도로')) {
+            goodsIdx = "6228"; // 1종(도로)
+        } else if (o.includes('2종') && o.includes('도로')) {
+            goodsIdx = "6222"; // 2종(도로)
+        } else if (o.includes('2종') && o.includes('기능')) {
+            goodsIdx = "6221"; // 2종(기능)
+        } else if (o.includes('6시간')) {
+            goodsIdx = "6237";
+        } else if (o.includes('12시간')) {
+            goodsIdx = "6238";
+        } else if (o.includes('24시간')) {
+            goodsIdx = "6239";
+        }
+
+        // Special Case: Consultation Duration Override
+        if (goodsIdx === "NONE") {
+            // Recalculate End Time (30 mins)
+            const [h, m] = startTime.split(':').map(Number);
+            const endDate = new Date(2000, 0, 1, h, m + 30);
+            endTime = `${String(endDate.getHours()).padStart(2, '0')}:${String(endDate.getMinutes()).padStart(2, '0')}`;
+            console.log(`[ErpService] -> Matched Consultation! Set 30min duration: ${startTime} ~ ${endTime}`);
+        }
+
+        // 4. Construct Payload
+        const payload = {
+            name: naverBooking.user_name,
+            phone: naverBooking.user_phone,
+            date: date,
+            start_time: startTime,
+            end_time: endTime,
+            product: naverBooking.product,
+            option: naverBooking.options,
+            goods_idx: goodsIdx,
+            memberType: 'existing',
+            seat_id: null,
+            dryRun: dryRun
+        };
+
+        // 5. Call Core Creation Logic
+        return await this.createReservation(payload);
+    }
+
     async createReservation(data: any): Promise<boolean> {
-        console.log(`[ErpService] createReservation called for ${data.name}`)
+        console.log(`[ErpService] createReservation called for ${data.name}, type: ${data.memberType || 'auto'}`)
 
         let seatId = data.seat_id;
 
-        // Fallback Seat Logic (Ported from Python)
+        // Fallback Seat Logic - Consultation uses dobong-9
         if (!seatId) {
             const product = data.product || '';
-            const request = data.request || '';
+            const goodsIdx = data.goods_idx || '';
 
-            if (product.includes('상담') && !request.includes('리뷰노트')) {
+            if (goodsIdx === 'NONE' || product.includes('상담') || product.includes('이용문의')) {
                 seatId = 'dobong-9';
-            } else if (request.includes('리뷰노트') || product.includes('체험권')) {
-                seatId = 'dobong-1';
             } else {
                 seatId = 'dobong-1';
             }
@@ -892,9 +997,29 @@ export class ErpService {
 
             await page.waitForTimeout(1000)
 
-            // Click Add Button
+            // Check for Duplicate Reservation (Optimistic Check)
+            const isDuplicate = await page.evaluate((arg) => {
+                // @ts-ignore
+                const events = $('#calendar').fullCalendar('clientEvents');
+                // @ts-ignore
+                const found = events.find(e => {
+                    if (!e.title || !e.start) return false;
+                    // Check Title (Name)
+                    const titleMatch = e.title.includes(arg.name);
+                    // Check Time (HH:mm)
+                    const eventTime = e.start.format('HH:mm'); // Moment.js object
+                    const timeMatch = eventTime === arg.startTime;
+                    return titleMatch && timeMatch;
+                });
+                return !!found;
+            }, { name: data.name, startTime: data.start_time });
+
+            if (isDuplicate) {
+                console.log(`[ErpService] Duplicate reservation found for ${data.name} at ${data.start_time}. Skipping.`);
+                return true;
+            }
+
             try {
-                // Try button click
                 const clicked = await page.evaluate(() => {
                     const btn = document.querySelector('button.add_cal_btn');
                     if (btn) { (btn as HTMLElement).click(); return true; }
@@ -914,22 +1039,18 @@ export class ErpService {
             const modalSelector = '#CalenderModalNew';
             await page.waitForSelector(modalSelector, { state: 'visible', timeout: 5000 });
 
-            // 3. Fill Date (Robust Datepicker handling)
+            // 3. Fill Date
             await page.evaluate((date) => {
                 // @ts-ignore
                 $('#insDate').val(date);
-                try {
-                    // @ts-ignore
-                    $('#insDate').datepicker('destroy');
-                } catch (e) { }
-
+                try { $('#insDate').datepicker('destroy'); } catch (e) { }
                 // @ts-ignore
                 $('#insDate').trigger('change');
             }, data.date);
 
-            await page.waitForTimeout(500);
+            await page.waitForTimeout(800);
 
-            // 4. Time
+            // 4. Time Selection
             const [sH, sM] = data.start_time.split(':');
             const [eH, eM] = data.end_time.split(':');
 
@@ -938,59 +1059,106 @@ export class ErpService {
             await page.selectOption(`${modalSelector} #insEtime`, eH);
             await page.selectOption(`${modalSelector} #insEtime_min`, eM);
 
-            await page.waitForTimeout(500); // Wait for device list refresh via AJAX
+            // 5. Member Handling
+            let isExistingMember = data.memberType === 'existing';
 
-            // 5. Member Info (Direct Join)
-            try {
-                // Click 'Direct Join' radio (class type_member_b)
+            if (isExistingMember) {
+                try {
+                    await page.click(`${modalSelector} input.type_member_a`);
+                    await page.waitForTimeout(200);
+
+                    const memberValue = await page.evaluate((targetName) => {
+                        // @ts-ignore
+                        const options = $(`#CalenderModalNew #member_select option`);
+                        let foundVal = null;
+                        // @ts-ignore
+                        options.each(function () {
+                            // @ts-ignore
+                            if ($(this).text().includes(targetName)) {
+                                // @ts-ignore
+                                foundVal = $(this).val();
+                                return false;
+                            }
+                        });
+                        return foundVal;
+                    }, data.name);
+
+                    if (memberValue) {
+                        console.log(`[ErpService] Found existing member: ${data.name} -> ${memberValue}`);
+                        await page.selectOption(`${modalSelector} #member_select`, memberValue as string);
+                    } else {
+                        console.warn(`[ErpService] Existing member not found for ${data.name}. Falling back to New Member.`);
+                        isExistingMember = false;
+                    }
+                } catch (e) {
+                    console.error('[ErpService] Error in existing member selection:', e);
+                    isExistingMember = false;
+                }
+            }
+
+            // 6. New Member Input
+            if (!isExistingMember) {
                 await page.click(`${modalSelector} input.type_member_b`);
-            } catch (e) { console.warn('Radio click failed'); }
-
-            await page.fill(`${modalSelector} #member_ins_name`, data.name);
-            if (data.phone) {
-                await page.fill(`${modalSelector} #insPhone`, data.phone);
+                await page.waitForTimeout(200);
+                await page.fill(`${modalSelector} #member_ins_name`, data.name);
+                if (data.phone) {
+                    await page.fill(`${modalSelector} #insPhone`, data.phone);
+                }
+                try {
+                    await page.selectOption(`${modalSelector} .birth_year`, "2000");
+                    await page.selectOption(`${modalSelector} .birth_month`, "01");
+                    await page.selectOption(`${modalSelector} .birth_day`, "01");
+                } catch (e) { }
             }
 
-            // Birthdate dummy
-            try {
-                await page.selectOption(`${modalSelector} .birth_year`, "2000");
-                await page.selectOption(`${modalSelector} .birth_month`, "01");
-                await page.selectOption(`${modalSelector} .birth_day`, "01");
-            } catch (e) { }
-
-            // 6. Product Selection
-            let goodsVal = "6268"; // Default
-            const pText = (data.product || '').replace(/\s/g, '');
-            const oText = (data.option || '').replace(/\s/g, '');
-
-            if (pText.includes('1시간') || pText.includes('체험권')) {
-                if (oText.includes('1종자동')) goodsVal = "6272";
-                else goodsVal = "6268";
-            } else if (pText.includes('2종시간제')) {
-                if (oText.includes('6시간')) goodsVal = "6269";
-                else if (oText.includes('12시간')) goodsVal = "6270";
-                else if (oText.includes('24시간')) goodsVal = "6271";
-            }
+            // 7. Product Selection - Handle NONE (Consultation)
+            const goodsVal = data.goods_idx || "6268";
 
             try {
-                // Name 'goods_idx'
-                await page.selectOption('select[name="goods_idx"]', goodsVal);
+                if (goodsVal === "NONE") {
+                    console.log('[ErpService] Selecting No Product (Consultation).');
+
+                    // Use JS/jQuery to toggle hidden checkbox directly (Cleaner, avoids 'visible' error)
+                    const noProductClicked = await page.evaluate((selector) => {
+                        // @ts-ignore
+                        const cb = $(`${selector} .nullGoods`);
+                        if (cb.length > 0) {
+                            if (!cb.prop('checked')) {
+                                cb.prop('checked', true).trigger('change');
+                            }
+                            return true;
+                        }
+                        return false;
+                    }, modalSelector);
+
+                    if (noProductClicked) {
+                        console.log('[ErpService] Checked .nullGoods via jQuery');
+                    } else {
+                        // Fallback: click label by text if class not found
+                        await page.click("label:has-text('상품없음')").catch(e =>
+                            console.warn('[ErpService] Failed to click No Product label:', e)
+                        );
+                    }
+                } else {
+                    await page.selectOption('select[name="goods_idx"]', goodsVal);
+                }
             } catch (e) {
-                // Fallback
-                try { await page.selectOption('select[name="goods_idx"]', { index: 1 }); } catch (e) { }
+                console.warn('[ErpService] Error selecting product:', e);
+                if (goodsVal !== "NONE") {
+                    try { await page.selectOption('select[name="goods_idx"]', { index: 1 }); } catch (e) { }
+                }
             }
 
-            // 7. Payment (Naver Pay = 12)
+            // 8. Payment
             try {
-                await page.selectOption(`${modalSelector} .payment_select`, "12");
+                await page.selectOption(`${modalSelector} .payment_select`, "12"); // Naver Pay
             } catch (e) { }
 
-            // 8. Seat Selection (Retry Logic)
+            // 9. Seat Selection (Retry Logic)
             console.log(`[ErpService] Selecting seat: ${seatId}`);
             let seatSelected = false;
 
             for (let i = 0; i < 5; i++) {
-                // Evaluate available options
                 const options = await page.evaluate((selector) => {
                     // @ts-ignore
                     const sel = $(`${selector} select#insMachine`);
@@ -1003,50 +1171,96 @@ export class ErpService {
                     return opts;
                 }, modalSelector);
 
-                let targetVal = null;
-                // Exact match
-                const exact = options.find((o: any) => o.text === seatId);
-                if (exact) targetVal = exact.value;
-
-                // Partial match
-                if (!targetVal) {
-                    const partial = options.find((o: any) => o.text.includes(seatId));
-                    if (partial) targetVal = partial.value;
+                if (options.length <= 1) { // Only default option
+                    await page.waitForTimeout(500);
+                    continue;
                 }
 
-                // Number match (e.g. '1' for 'dobong-1')
-                if (!targetVal && seatId.includes('-')) {
-                    const num = seatId.split('-')[1];
-                    const numMatch = options.find((o: any) => o.text.endsWith('-' + num));
-                    if (numMatch) targetVal = numMatch.value;
+                let targetVal = null;
+
+                // Explicit Mapping for Consultation Seat
+                if (seatId === 'dobong-9') {
+                    const found = options.find((o: any) => o.value == '28' || o.text.includes('dobong-9'));
+                    if (found) targetVal = found.value;
+                }
+
+                if (!targetVal) {
+                    // Exact -> Partial -> Number match
+                    const exact = options.find((o: any) => o.text === seatId);
+                    if (exact) targetVal = exact.value;
+                    else {
+                        const partial = options.find((o: any) => o.text.includes(seatId));
+                        if (partial) targetVal = partial.value;
+                    }
                 }
 
                 if (targetVal) {
-                    await page.evaluate((val) => {
-                        // @ts-ignore
-                        $('#CalenderModalNew select#insMachine').val(val).trigger('change');
-                    }, targetVal);
+                    await page.selectOption(`${modalSelector} #insMachine`, targetVal);
                     seatSelected = true;
                     break;
                 }
-
                 await page.waitForTimeout(500);
             }
 
             if (!seatSelected) {
-                console.error(`[ErpService] Could not find seat option for ${seatId}`);
-                // Proceed anyway? Or fail? The python code retry loop implies we really want it.
+                console.warn(`[ErpService] Could not find seat option for ${seatId}. Proceeding without specific seat.`);
             }
 
-            // 9. Submit
+            // 10. Submit
+            if (data.dryRun) {
+                console.log('[ErpService] DryRun: Skipping final submit click and closing modal.');
+                try {
+                    await page.evaluate(() => {
+                        // @ts-ignore
+                        $('.modal').modal('hide');
+                    });
+                } catch { }
+                return true;
+            }
+
+            // Dialog Handler to catch alerts
+            page.once('dialog', async dialog => {
+                console.log(`[ErpService] Dialog detected: ${dialog.message()}`);
+                await dialog.dismiss();
+            });
+
+            // Debug: Log values before submit
+            const debugVals = await page.evaluate((selector) => {
+                return {
+                    // @ts-ignore
+                    name: $(`${selector} #member_ins_name`).val(),
+                    // @ts-ignore
+                    phone: $(`${selector} #insPhone`).val(),
+                    // @ts-ignore
+                    goods: $(`${selector} select[name="goods_idx"]`).val(),
+                    // @ts-ignore
+                    machine: $(`${selector} #insMachine`).val(),
+                    // @ts-ignore
+                    noProduct: $('.nullGoods').prop('checked')
+                }
+            }, modalSelector);
+            console.log('[ErpService] Pre-submit Values:', JSON.stringify(debugVals));
+
             await page.click(`${modalSelector} button.antosubmit`);
-            await page.waitForSelector(modalSelector, { state: 'hidden', timeout: 5000 });
+
+            try {
+                await page.waitForSelector(modalSelector, { state: 'hidden', timeout: 15000 });
+            } catch (e) {
+                console.warn('[ErpService] Modal did not close within timeout. Checking for validation errors...');
+                // Check for potential error messages
+                const errorText = await page.evaluate(() => {
+                    // Look for common error containers or alerts
+                    // @ts-ignore
+                    return document.body.innerText.match(/필수|입력|확인|오류|Error|Invalid/gi);
+                });
+                console.warn('[ErpService] Visible Text Snippets:', errorText);
+                throw e;
+            }
 
             return true;
 
         } catch (e) {
             console.error('[ErpService] Create Reservation failed:', e);
-            // Cleanup: try to close modal
             try {
                 await this.page?.evaluate(() => {
                     // @ts-ignore

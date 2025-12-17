@@ -23,7 +23,37 @@ export function ReservationCollector() {
     const [mergedList, setMergedList] = useState<Reservation[]>([])
     const [loading, setLoading] = useState(false)
     const [statusMessage, setStatusMessage] = useState('')
-    const [selectedItems, setSelectedItems] = useState<Set<number>>(new Set())
+    const [dryRun, setDryRun] = useState(true)
+
+    const handleAutoSync = async () => {
+        setLoading(true)
+        setStatusMessage(`자동 동기화 시작 (DryRun: ${dryRun})...`)
+        try {
+            // 1. Force Login Check
+            const loggedIn = await window.api.scraper.naverLogin()
+            if (!loggedIn) {
+                alert('네이버 로그인에 실패했습니다. 수동으로 로그인해주세요.')
+                setLoading(false)
+                return
+            }
+
+            // 2. Sync
+            const results = await window.api.erp.syncNaver(dryRun)
+
+            // 3. Show Results (Optional: update list with results)
+            console.log('Sync Results:', results)
+            setStatusMessage(`동기화 완료: ${results.length}건 처리됨`)
+
+            alert(`동기화 완료!\n총 ${results.length}건 처리되었습니다.\n(DryRun: ${dryRun ? 'ON' : 'OFF'})`)
+
+        } catch (e) {
+            console.error(e)
+            setStatusMessage('동기화 실패')
+            alert('동기화 중 오류가 발생했습니다.')
+        } finally {
+            setLoading(false)
+        }
+    }
 
     const fetchNaver = async () => {
         setLoading(true)
@@ -37,70 +67,73 @@ export function ReservationCollector() {
                 return
             }
 
-            // User must login manually if not already. 
-            // We can ask user confirmation or just try fetching.
-            // ScraperService.getNaverBookings launches browser if needed.
-
             setStatusMessage('예약 목록 스크래핑 중...')
             const bookings = await window.api.scraper.getNaverBookings()
 
             const parsed: Reservation[] = bookings.map((b: any) => {
                 // Parse Date "2024. 12. 18. (수) 오후 4:00" -> YYYY-MM-DD, HH:mm
-                // This parsing logic depends on Naver's exact format.
-                // Let's assume ScraperService returns raw strings, we need robust parsing.
-                // Actually ScraperService returns 'dateStr' like "2024. 12. 18. (수) 16:00"
-
+                // Scraper returns 'date_string'
+                const rawDate = b.date_string || ''
                 let date = ''
                 let startTime = ''
                 let endTime = ''
 
                 try {
-                    // Regex for "2024. 12. 18. (수) 16:00" or "2024. 12. 18. (수) 오후 4:00"
-                    // Simple approach: Extract numbers
-                    const parts = b.dateStr.match(/(\d{4})\.\s*(\d{1,2})\.\s*(\d{1,2})/)
+                    const parts = rawDate.match(/(\d{4})\.\s*(\d{1,2})\.\s*(\d{1,2})/)
                     if (parts) {
                         date = `${parts[1]}-${parts[2].padStart(2, '0')}-${parts[3].padStart(2, '0')}`
                     }
 
-                    // Time
-                    // If "16:00"
-                    const timeMatch = b.dateStr.match(/(\d{1,2}):(\d{2})/)
+                    const timeMatch = rawDate.match(/(\d{1,2}):(\d{2})/)
                     if (timeMatch) {
                         let h = parseInt(timeMatch[1])
                         const m = timeMatch[2]
-                        if (b.dateStr.includes('오후') && h < 12) h += 12
-                        if (b.dateStr.includes('오전') && h === 12) h = 0
+                        if (rawDate.includes('오후') && h < 12) h += 12
+                        if (rawDate.includes('오전') && h === 12) h = 0
                         startTime = `${String(h).padStart(2, '0')}:${m}`
                     }
-                } catch (e) { console.error('Date parse error', b.dateStr) }
+                } catch (e) {
+                    console.error('Date parse error', rawDate)
+                }
 
-                // Calculate End Time based on duration
-                if (startTime && b.durationMin) {
+                if (startTime && !endTime && b.durationMin) {
                     const [h, m] = startTime.split(':').map(Number)
                     const endD = new Date(2000, 0, 1, h, m + b.durationMin)
                     endTime = `${String(endD.getHours()).padStart(2, '0')}:${String(endD.getMinutes()).padStart(2, '0')}`
+                } else if (startTime && !endTime) {
+                    const [h, m] = startTime.split(':').map(Number)
+
+                    // Consultation Check (30 mins)
+                    const p = b.product || ''
+                    if (p.includes('이용문의') || p.includes('상담')) {
+                        const endD = new Date(2000, 0, 1, h, m + 30) // 30 min add
+                        endTime = `${String(endD.getHours()).padStart(2, '0')}:${String(endD.getMinutes()).padStart(2, '0')}`
+                    } else {
+                        // Default 1 Hour
+                        const endH = h + 1
+                        endTime = `${String(endH).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+                    }
                 }
 
                 return {
                     source: 'Naver',
-                    name: b.name,
+                    name: b.user_name || 'Unknown',
                     date: date,
                     startTime: startTime,
                     endTime: endTime,
                     product: b.product,
-                    option: b.option,
-                    phone: b.phone,
+                    option: b.options,
+                    phone: b.user_phone,
                     request: b.request,
-                    status: 'New' // Default, will update after compare
+                    status: 'New'
                 }
             })
 
-            // Filter invalid dates
             const valid = parsed.filter(p => p.date && p.startTime)
             setNaverReservations(valid)
+            setMergedList(valid)
             setStatusMessage(`네이버 예약 ${valid.length}건 수집 완료`)
 
-            // Auto-trigger ERP fetch if we have data
             if (valid.length > 0) {
                 fetchErpAndCompare(valid)
             }
@@ -113,44 +146,12 @@ export function ReservationCollector() {
         }
     }
 
-    const loadMockData = () => {
-        const today = new Date().toISOString().split('T')[0]
-        const mockData: Reservation[] = [
-            {
-                source: 'Naver',
-                name: '테스트유저',
-                date: today,
-                startTime: '14:00',
-                endTime: '15:00',
-                product: '1시간 이용권',
-                option: '기본',
-                phone: '010-1234-5678',
-                request: '테스트 예약입니다.',
-                status: 'New'
-            },
-            {
-                source: 'Naver',
-                name: '중복유저',
-                date: today,
-                startTime: '16:00',
-                endTime: '17:00',
-                product: '2종 시간제',
-                option: '6시간',
-                phone: '010-9876-5432',
-                request: '이미 등록된 유저 테스트',
-                status: 'New'
-            }
-        ]
-        setNaverReservations(mockData)
-        setMergedList(mockData) // Also update the display list
-        setStatusMessage('테스트 데이터 로드됨')
-    }
+
 
     const fetchErpAndCompare = async (currentNaverList: Reservation[]) => {
         setLoading(true)
         setStatusMessage('ERP 데이터 대조 중...')
         try {
-            // Fetch 2 weeks range
             const today = new Date()
             const twoWeeksLater = new Date(today.getTime() + 14 * 24 * 60 * 60 * 1000)
 
@@ -158,24 +159,13 @@ export function ReservationCollector() {
             const eDate = twoWeeksLater.toISOString().split('T')[0]
 
             const erpData = await window.api.erp.getSchedule(sDate, eDate)
-            // setErpReservations(erpData)
 
-            // Compare
             const compared = currentNaverList.map(naver => {
-                // Logic: Same Name AND Same Date AND (Similar Time OR Overlap)
-                // Simple: Same Name + Same Date
                 const dup = erpData.find((e: any) => {
-                    // ERP event start format: "2024-12-18T16:00:00"
                     if (!e.start) return false
                     const eDate = e.start.split('T')[0]
-                    // const eTime = e.start.split('T')[1]?.substring(0, 5) // HH:mm
-
-                    // Name match (fuzzy?)
                     const nameMatch = e.title.includes(naver.name)
                     const dateMatch = eDate === naver.date
-
-                    // Time match (optional but good for strictness)
-                    // Let's rely on Name + Date for now as primary key
                     return nameMatch && dateMatch
                 })
 
@@ -196,56 +186,7 @@ export function ReservationCollector() {
         }
     }
 
-    const handleRegister = async () => {
-        const targets = mergedList.filter((_, i) => selectedItems.has(i))
-        if (targets.length === 0) return
 
-        if (!confirm(`${targets.length}건의 예약을 ERP에 등록하시겠습니까?`)) return
-
-        setLoading(true)
-        setStatusMessage('ERP 등록 진행 중...')
-
-        let successCount = 0
-        const newMerged = [...mergedList]
-
-        for (const item of targets) {
-            try {
-                const success = await window.api.erp.createReservation({
-                    date: item.date,
-                    start_time: item.startTime,
-                    end_time: item.endTime,
-                    name: item.name,
-                    phone: item.phone,
-                    product: item.product,
-                    option: item.option,
-                    request: item.request
-                })
-
-                if (success) {
-                    successCount++
-                    // Update status locally
-                    const idx = mergedList.indexOf(item)
-                    if (idx !== -1) {
-                        newMerged[idx].status = 'Registered'
-                    }
-                }
-            } catch (e) {
-                console.error(`Failed to register ${item.name}`, e)
-            }
-        }
-
-        setMergedList(newMerged)
-        setSelectedItems(new Set()) // Clear selection
-        setStatusMessage(`${successCount}건 등록 완료`)
-        setLoading(false)
-    }
-
-    const toggleSelect = (index: number) => {
-        const newSet = new Set(selectedItems)
-        if (newSet.has(index)) newSet.delete(index)
-        else newSet.add(index)
-        setSelectedItems(newSet)
-    }
 
     return (
         <div className="flex flex-col h-full bg-gray-100 p-6">
@@ -257,33 +198,43 @@ export function ReservationCollector() {
                     </h2>
                     <p className="text-gray-500 text-sm mt-1">네이버 예약을 수집하여 ERP에 등록합니다.</p>
                 </div>
-                <div className="flex space-x-3">
+                <div className="flex items-center space-x-3">
                     <span className="flex items-center text-sm text-gray-600 mr-4">
                         {loading && <RefreshCw className="animate-spin mr-2 h-4 w-4" />}
                         {statusMessage}
                     </span>
+
+                    {/* New UI Controls */}
+                    <div className="flex items-center bg-white p-2 rounded-lg border border-gray-300 mr-2">
+                        <input
+                            type="checkbox"
+                            id="dryRun"
+                            checked={dryRun}
+                            onChange={(e) => setDryRun(e.target.checked)}
+                            className="mr-2 h-4 w-4 text-blue-600 rounded"
+                        />
+                        <label htmlFor="dryRun" className="text-sm font-medium text-gray-700 cursor-pointer select-none">
+                            테스트 모드 (저장안함)
+                        </label>
+                    </div>
+
+                    <button
+                        onClick={handleAutoSync}
+                        disabled={loading}
+                        className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 flex items-center gap-2"
+                    >
+                        <RefreshCw size={16} />
+                        자동 동기화 (One-Click)
+                    </button>
+
+                    <div className="h-6 w-px bg-gray-300 mx-2"></div>
+
                     <button
                         onClick={fetchNaver}
                         disabled={loading}
-                        className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center gap-2"
+                        className="px-4 py-2 bg-white text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 flex items-center gap-2"
                     >
-                        <RefreshCw size={16} />
-                        네이버 수집
-                    </button>
-                    <button
-                        onClick={loadMockData}
-                        disabled={loading}
-                        className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 disabled:opacity-50 flex items-center gap-2"
-                    >
-                        <span>테스트 데이터</span>
-                    </button>
-                    <button
-                        onClick={() => fetchErpAndCompare(naverReservations)}
-                        disabled={loading || naverReservations.length === 0}
-                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
-                    >
-                        <Check size={16} />
-                        ERP 대조
+                        <span>단순 수집 (결과 확인용)</span>
                     </button>
                 </div>
             </div>
@@ -294,9 +245,7 @@ export function ReservationCollector() {
                     <table className="w-full text-sm text-left">
                         <thead className="bg-gray-50 text-gray-600 font-medium border-b border-gray-200 sticky top-0">
                             <tr>
-                                <th className="p-4 w-10">
-                                    <input type="checkbox" disabled />
-                                </th>
+
                                 <th className="p-4">상태</th>
                                 <th className="p-4">예약자</th>
                                 <th className="p-4">날짜/시간</th>
@@ -317,15 +266,7 @@ export function ReservationCollector() {
                                         "hover:bg-gray-50 transition-colors",
                                         item.status === 'Registered' ? "bg-gray-50 opacity-70" : "bg-white"
                                     )}>
-                                        <td className="p-4">
-                                            <input
-                                                type="checkbox"
-                                                checked={selectedItems.has(idx)}
-                                                onChange={() => toggleSelect(idx)}
-                                                disabled={item.status === 'Registered'}
-                                                className="rounded text-blue-600 focus:ring-blue-500"
-                                            />
-                                        </td>
+
                                         <td className="p-4">
                                             {item.status === 'New' && <span className="px-2 py-1 bg-green-100 text-green-700 rounded text-xs font-bold">신규</span>}
                                             {item.status === 'Registered' && <span className="px-2 py-1 bg-gray-200 text-gray-600 rounded text-xs font-bold">등록됨</span>}
@@ -354,19 +295,7 @@ export function ReservationCollector() {
                 </div>
 
                 {/* Footer Action */}
-                <div className="p-4 border-t border-gray-200 bg-gray-50 flex justify-between items-center">
-                    <div className="text-sm text-gray-500">
-                        선택됨: {selectedItems.size}건
-                    </div>
-                    <button
-                        onClick={handleRegister}
-                        disabled={selectedItems.size === 0 || loading}
-                        className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 font-medium shadow-sm flex items-center gap-2"
-                    >
-                        <span>선택 항목 등록하기</span>
-                        <ArrowRight size={16} />
-                    </button>
-                </div>
+
             </div>
         </div>
     )

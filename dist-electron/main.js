@@ -3,12 +3,12 @@ var __defProp = Object.defineProperty;
 var __defNormalProp = (obj, key2, value) => key2 in obj ? __defProp(obj, key2, { enumerable: true, configurable: true, writable: true, value }) : obj[key2] = value;
 var __publicField = (obj, key2, value) => __defNormalProp(obj, typeof key2 !== "symbol" ? key2 + "" : key2, value);
 const require$$1$2 = require("electron");
-const require$$0$3 = require("path");
+const require$$0$2 = require("path");
 const playwright = require("playwright");
 const require$$0$1 = require("buffer");
 const require$$1$1 = require("string_decoder");
+const fs$3 = require("fs");
 const require$$1$4 = require("util");
-const require$$0$2 = require("fs");
 const require$$3$3 = require("crypto");
 const require$$4$1 = require("assert");
 const require$$5$1 = require("events");
@@ -25330,17 +25330,94 @@ class ErpService {
       return false;
     }
   }
+  /**
+   * Maps Naver Booking Data to ERP Format and creates reservation.
+   * Implements logic from docs/NAVER_TO_ERP_MAPPING.md
+   */
+  async registerToErp(naverBooking, dryRun = false) {
+    console.log(`[ErpService] registerToErp processing: ${naverBooking.user_name} (DryRun: ${dryRun})`);
+    const dateMatch = naverBooking.date_string.match(/(\d{4})\. (\d{1,2})\. (\d{1,2})/);
+    if (!dateMatch) {
+      console.error("[ErpService] Invalid date format:", naverBooking.date_string);
+      return false;
+    }
+    const date = `${dateMatch[1]}-${dateMatch[2].padStart(2, "0")}-${dateMatch[3].padStart(2, "0")}`;
+    let timeStr = naverBooking.date_string.split(") ")[1] || "";
+    timeStr = timeStr.trim();
+    if (timeStr.includes("(")) timeStr = timeStr.split("(")[0].trim();
+    let [ampm, clock] = timeStr.split(" ");
+    if (!clock && ampm.includes(":")) {
+      clock = ampm;
+      ampm = "오전";
+    }
+    let [hour, minute] = (clock || "09:00").split(":").map(Number);
+    if (ampm === "오후" && hour < 12) hour += 12;
+    if (ampm === "오전" && hour === 12) hour = 0;
+    const startTime = `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+    let endHour = hour + 1;
+    let endTime = `${String(endHour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+    let goodsIdx = "6268";
+    const p = naverBooking.product || "";
+    const o = naverBooking.options || "";
+    const full = (p + o).replace(/\s/g, "");
+    console.log(`[ErpService] Mapping - Product: "${p}", Option: "${o}"`);
+    if (p.includes("이용문의") || p.includes("상담")) {
+      goodsIdx = "NONE";
+    } else if (p.includes("체험권") && o.includes("2종자동")) {
+      goodsIdx = "6236";
+    } else if (o.includes("1종자동") && o.includes("기능") && o.includes("도로")) {
+      goodsIdx = "6226";
+    } else if (o.includes("1종수동") && o.includes("기능") && o.includes("도로")) {
+      goodsIdx = "6229";
+    } else if (o === "1종자동" || full.includes("1종자동")) {
+      goodsIdx = "6240";
+    } else if (o === "1종수동" || full.includes("1종수동")) {
+      goodsIdx = "6244";
+    } else if (p.includes("합격무제한") || o.includes("2종(기능+도로)")) {
+      goodsIdx = "6223";
+    } else if (o.includes("1종") && o.includes("도로")) {
+      goodsIdx = "6228";
+    } else if (o.includes("2종") && o.includes("도로")) {
+      goodsIdx = "6222";
+    } else if (o.includes("2종") && o.includes("기능")) {
+      goodsIdx = "6221";
+    } else if (o.includes("6시간")) {
+      goodsIdx = "6237";
+    } else if (o.includes("12시간")) {
+      goodsIdx = "6238";
+    } else if (o.includes("24시간")) {
+      goodsIdx = "6239";
+    }
+    if (goodsIdx === "NONE") {
+      const [h, m] = startTime.split(":").map(Number);
+      const endDate = new Date(2e3, 0, 1, h, m + 30);
+      endTime = `${String(endDate.getHours()).padStart(2, "0")}:${String(endDate.getMinutes()).padStart(2, "0")}`;
+      console.log(`[ErpService] -> Matched Consultation! Set 30min duration: ${startTime} ~ ${endTime}`);
+    }
+    const payload = {
+      name: naverBooking.user_name,
+      phone: naverBooking.user_phone,
+      date,
+      start_time: startTime,
+      end_time: endTime,
+      product: naverBooking.product,
+      option: naverBooking.options,
+      goods_idx: goodsIdx,
+      memberType: "existing",
+      seat_id: null,
+      dryRun
+    };
+    return await this.createReservation(payload);
+  }
   async createReservation(data2) {
     var _a2;
-    console.log(`[ErpService] createReservation called for ${data2.name}`);
+    console.log(`[ErpService] createReservation called for ${data2.name}, type: ${data2.memberType || "auto"}`);
     let seatId = data2.seat_id;
     if (!seatId) {
       const product = data2.product || "";
-      const request = data2.request || "";
-      if (product.includes("상담") && !request.includes("리뷰노트")) {
+      const goodsIdx = data2.goods_idx || "";
+      if (goodsIdx === "NONE" || product.includes("상담") || product.includes("이용문의")) {
         seatId = "dobong-9";
-      } else if (request.includes("리뷰노트") || product.includes("체험권")) {
-        seatId = "dobong-1";
       } else {
         seatId = "dobong-1";
       }
@@ -25358,6 +25435,21 @@ class ErpService {
         $("#calendar").fullCalendar("changeView", "agendaDay");
       }, data2.date);
       await page.waitForTimeout(1e3);
+      const isDuplicate = await page.evaluate((arg) => {
+        const events = $("#calendar").fullCalendar("clientEvents");
+        const found = events.find((e) => {
+          if (!e.title || !e.start) return false;
+          const titleMatch = e.title.includes(arg.name);
+          const eventTime = e.start.format("HH:mm");
+          const timeMatch = eventTime === arg.startTime;
+          return titleMatch && timeMatch;
+        });
+        return !!found;
+      }, { name: data2.name, startTime: data2.start_time });
+      if (isDuplicate) {
+        console.log(`[ErpService] Duplicate reservation found for ${data2.name} at ${data2.start_time}. Skipping.`);
+        return true;
+      }
       try {
         const clicked = await page.evaluate(() => {
           const btn = document.querySelector("button.add_cal_btn");
@@ -25386,46 +25478,86 @@ class ErpService {
         }
         $("#insDate").trigger("change");
       }, data2.date);
-      await page.waitForTimeout(500);
+      await page.waitForTimeout(800);
       const [sH, sM] = data2.start_time.split(":");
       const [eH, eM] = data2.end_time.split(":");
       await page.selectOption(`${modalSelector} #insStime`, sH);
       await page.selectOption(`${modalSelector} #insStime_min`, sM);
       await page.selectOption(`${modalSelector} #insEtime`, eH);
       await page.selectOption(`${modalSelector} #insEtime_min`, eM);
-      await page.waitForTimeout(500);
-      try {
-        await page.click(`${modalSelector} input.type_member_b`);
-      } catch (e) {
-        console.warn("Radio click failed");
-      }
-      await page.fill(`${modalSelector} #member_ins_name`, data2.name);
-      if (data2.phone) {
-        await page.fill(`${modalSelector} #insPhone`, data2.phone);
-      }
-      try {
-        await page.selectOption(`${modalSelector} .birth_year`, "2000");
-        await page.selectOption(`${modalSelector} .birth_month`, "01");
-        await page.selectOption(`${modalSelector} .birth_day`, "01");
-      } catch (e) {
-      }
-      let goodsVal = "6268";
-      const pText = (data2.product || "").replace(/\s/g, "");
-      const oText = (data2.option || "").replace(/\s/g, "");
-      if (pText.includes("1시간") || pText.includes("체험권")) {
-        if (oText.includes("1종자동")) goodsVal = "6272";
-        else goodsVal = "6268";
-      } else if (pText.includes("2종시간제")) {
-        if (oText.includes("6시간")) goodsVal = "6269";
-        else if (oText.includes("12시간")) goodsVal = "6270";
-        else if (oText.includes("24시간")) goodsVal = "6271";
-      }
-      try {
-        await page.selectOption('select[name="goods_idx"]', goodsVal);
-      } catch (e) {
+      let isExistingMember = data2.memberType === "existing";
+      if (isExistingMember) {
         try {
-          await page.selectOption('select[name="goods_idx"]', { index: 1 });
-        } catch (e2) {
+          await page.click(`${modalSelector} input.type_member_a`);
+          await page.waitForTimeout(200);
+          const memberValue = await page.evaluate((targetName) => {
+            const options = $(`#CalenderModalNew #member_select option`);
+            let foundVal = null;
+            options.each(function() {
+              if ($(this).text().includes(targetName)) {
+                foundVal = $(this).val();
+                return false;
+              }
+            });
+            return foundVal;
+          }, data2.name);
+          if (memberValue) {
+            console.log(`[ErpService] Found existing member: ${data2.name} -> ${memberValue}`);
+            await page.selectOption(`${modalSelector} #member_select`, memberValue);
+          } else {
+            console.warn(`[ErpService] Existing member not found for ${data2.name}. Falling back to New Member.`);
+            isExistingMember = false;
+          }
+        } catch (e) {
+          console.error("[ErpService] Error in existing member selection:", e);
+          isExistingMember = false;
+        }
+      }
+      if (!isExistingMember) {
+        await page.click(`${modalSelector} input.type_member_b`);
+        await page.waitForTimeout(200);
+        await page.fill(`${modalSelector} #member_ins_name`, data2.name);
+        if (data2.phone) {
+          await page.fill(`${modalSelector} #insPhone`, data2.phone);
+        }
+        try {
+          await page.selectOption(`${modalSelector} .birth_year`, "2000");
+          await page.selectOption(`${modalSelector} .birth_month`, "01");
+          await page.selectOption(`${modalSelector} .birth_day`, "01");
+        } catch (e) {
+        }
+      }
+      const goodsVal = data2.goods_idx || "6268";
+      try {
+        if (goodsVal === "NONE") {
+          console.log("[ErpService] Selecting No Product (Consultation).");
+          const noProductClicked = await page.evaluate((selector) => {
+            const cb = $(`${selector} .nullGoods`);
+            if (cb.length > 0) {
+              if (!cb.prop("checked")) {
+                cb.prop("checked", true).trigger("change");
+              }
+              return true;
+            }
+            return false;
+          }, modalSelector);
+          if (noProductClicked) {
+            console.log("[ErpService] Checked .nullGoods via jQuery");
+          } else {
+            await page.click("label:has-text('상품없음')").catch(
+              (e) => console.warn("[ErpService] Failed to click No Product label:", e)
+            );
+          }
+        } else {
+          await page.selectOption('select[name="goods_idx"]', goodsVal);
+        }
+      } catch (e) {
+        console.warn("[ErpService] Error selecting product:", e);
+        if (goodsVal !== "NONE") {
+          try {
+            await page.selectOption('select[name="goods_idx"]', { index: 1 });
+          } catch (e2) {
+          }
         }
       }
       try {
@@ -25443,32 +25575,73 @@ class ErpService {
           });
           return opts;
         }, modalSelector);
-        let targetVal = null;
-        const exact = options.find((o) => o.text === seatId);
-        if (exact) targetVal = exact.value;
-        if (!targetVal) {
-          const partial = options.find((o) => o.text.includes(seatId));
-          if (partial) targetVal = partial.value;
+        if (options.length <= 1) {
+          await page.waitForTimeout(500);
+          continue;
         }
-        if (!targetVal && seatId.includes("-")) {
-          const num = seatId.split("-")[1];
-          const numMatch = options.find((o) => o.text.endsWith("-" + num));
-          if (numMatch) targetVal = numMatch.value;
+        let targetVal = null;
+        if (seatId === "dobong-9") {
+          const found = options.find((o) => o.value == "28" || o.text.includes("dobong-9"));
+          if (found) targetVal = found.value;
+        }
+        if (!targetVal) {
+          const exact = options.find((o) => o.text === seatId);
+          if (exact) targetVal = exact.value;
+          else {
+            const partial = options.find((o) => o.text.includes(seatId));
+            if (partial) targetVal = partial.value;
+          }
         }
         if (targetVal) {
-          await page.evaluate((val2) => {
-            $("#CalenderModalNew select#insMachine").val(val2).trigger("change");
-          }, targetVal);
+          await page.selectOption(`${modalSelector} #insMachine`, targetVal);
           seatSelected = true;
           break;
         }
         await page.waitForTimeout(500);
       }
       if (!seatSelected) {
-        console.error(`[ErpService] Could not find seat option for ${seatId}`);
+        console.warn(`[ErpService] Could not find seat option for ${seatId}. Proceeding without specific seat.`);
       }
+      if (data2.dryRun) {
+        console.log("[ErpService] DryRun: Skipping final submit click and closing modal.");
+        try {
+          await page.evaluate(() => {
+            $(".modal").modal("hide");
+          });
+        } catch {
+        }
+        return true;
+      }
+      page.once("dialog", async (dialog) => {
+        console.log(`[ErpService] Dialog detected: ${dialog.message()}`);
+        await dialog.dismiss();
+      });
+      const debugVals = await page.evaluate((selector) => {
+        return {
+          // @ts-ignore
+          name: $(`${selector} #member_ins_name`).val(),
+          // @ts-ignore
+          phone: $(`${selector} #insPhone`).val(),
+          // @ts-ignore
+          goods: $(`${selector} select[name="goods_idx"]`).val(),
+          // @ts-ignore
+          machine: $(`${selector} #insMachine`).val(),
+          // @ts-ignore
+          noProduct: $(".nullGoods").prop("checked")
+        };
+      }, modalSelector);
+      console.log("[ErpService] Pre-submit Values:", JSON.stringify(debugVals));
       await page.click(`${modalSelector} button.antosubmit`);
-      await page.waitForSelector(modalSelector, { state: "hidden", timeout: 5e3 });
+      try {
+        await page.waitForSelector(modalSelector, { state: "hidden", timeout: 15e3 });
+      } catch (e) {
+        console.warn("[ErpService] Modal did not close within timeout. Checking for validation errors...");
+        const errorText = await page.evaluate(() => {
+          return document.body.innerText.match(/필수|입력|확인|오류|Error|Invalid/gi);
+        });
+        console.warn("[ErpService] Visible Text Snippets:", errorText);
+        throw e;
+      }
       return true;
     } catch (e) {
       console.error("[ErpService] Create Reservation failed:", e);
@@ -25531,11 +25704,38 @@ class ErpService {
 class ScraperService {
   constructor() {
     __publicField(this, "browser", null);
+    __publicField(this, "context", null);
     __publicField(this, "page", null);
+    __publicField(this, "cookiePath");
+    const userDataPath = require$$1$2.app.getPath("userData");
+    this.cookiePath = require$$0$2.join(userDataPath, "naver_cookies.json");
+  }
+  async loadSession() {
+    if (!this.context) return;
+    try {
+      if (fs$3.existsSync(this.cookiePath)) {
+        const cookies = JSON.parse(fs$3.readFileSync(this.cookiePath, "utf-8"));
+        await this.context.addCookies(cookies);
+        console.log(`[ScraperService] Loaded ${cookies.length} cookies from ${this.cookiePath}`);
+      }
+    } catch (e) {
+      console.error("[ScraperService] Error loading session:", e);
+    }
+  }
+  async saveSession() {
+    if (!this.context) return;
+    try {
+      const cookies = await this.context.cookies();
+      fs$3.writeFileSync(this.cookiePath, JSON.stringify(cookies, null, 2));
+      console.log(`[ScraperService] Saved ${cookies.length} cookies to ${this.cookiePath}`);
+    } catch (e) {
+      console.error("[ScraperService] Error saving session:", e);
+    }
   }
   async start() {
     if (this.browser && !this.browser.isConnected()) {
       this.browser = null;
+      this.context = null;
       this.page = null;
     }
     if (this.page && this.page.isClosed()) {
@@ -25543,25 +25743,47 @@ class ScraperService {
     }
     if (!this.browser) {
       this.browser = await playwright.chromium.launch({ headless: false });
+      this.context = await this.browser.newContext({
+        userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+      });
+      await this.loadSession();
       this.browser.on("disconnected", () => {
         console.log("[ScraperService] Browser disconnected");
         this.browser = null;
+        this.context = null;
         this.page = null;
       });
-      this.page = await this.browser.newPage();
+      this.page = await this.context.newPage();
     } else if (!this.page) {
-      this.page = await this.browser.newPage();
+      if (!this.context) this.context = await this.browser.newContext();
+      this.page = await this.context.newPage();
     }
   }
   async naverLogin() {
     try {
       await this.start();
       if (!this.page) return false;
-      await this.page.goto("https://nid.naver.com/nidlogin.login");
+      const page = this.page;
+      const targetUrl = "https://partner.booking.naver.com/bizes/213948/booking-list-view";
+      console.log("[ScraperService] Checking existing login session...");
+      await page.goto(targetUrl);
+      await page.waitForTimeout(1e3);
+      if (!page.url().includes("nid.naver.com")) {
+        console.log("[ScraperService] Already logged in!");
+        return true;
+      }
+      console.log("[ScraperService] Session expired. Redirecting to login...");
+      await page.goto("https://nid.naver.com/nidlogin.login");
       console.log("[ScraperService] Please login to Naver manually...");
+      await page.waitForURL((url) => {
+        const href = url.toString();
+        return !href.includes("nidlogin") && (href.includes("partner.booking.naver.com") || href.includes("naver.com"));
+      }, { timeout: 12e4 });
+      console.log("[ScraperService] Login detected, saving session...");
+      await this.saveSession();
       return true;
     } catch (e) {
-      console.error("[ScraperService] Naver login error:", e);
+      console.error("[ScraperService] Naver login timeout or error:", e);
       return false;
     }
   }
@@ -25577,105 +25799,90 @@ class ScraperService {
       return false;
     }
   }
-  async getNaverBookings() {
-    console.log("[ScraperService] getNaverBookings called");
+  async scrapeNaverReservations() {
+    console.log("[ScraperService] scrapeNaverReservations called");
     try {
       await this.start();
       if (!this.page) return [];
       const page = this.page;
       await page.goto("https://partner.booking.naver.com/bizes/697059/booking-list-view", { waitUntil: "domcontentloaded" });
+      if (page.url().includes("nidlogin") || page.url().includes("login")) {
+        console.warn("[ScraperService] Not logged in. Please run naverLogin first.");
+        return [];
+      }
       try {
         await page.waitForSelector("div[class*='BookingListView__list-contents']", { timeout: 1e4 });
       } catch (e) {
         console.error("[ScraperService] List container not found");
         return [];
       }
-      const bookings = await page.evaluate(() => {
-        const results = [];
-        const rows = document.querySelectorAll("div[class*='BookingListView__name__']");
-        rows.forEach((nameCell) => {
-          try {
-            const row = nameCell.parentElement;
-            if (!row) return;
-            const name = nameCell.innerText.trim();
-            const statusCell = row.querySelector("div[class*='BookingListView__state']");
-            const status = statusCell ? statusCell.innerText.trim() : "Unknown";
-            if (status !== "신청" && status !== "확정") return;
-            const dateCell = row.querySelector("div[class*='BookingListView__book-date']");
-            const dateStr = dateCell ? dateCell.innerText.trim() : "";
-            const productCell = row.querySelector("div[class*='BookingListView__host']");
-            const product = productCell ? productCell.innerText.trim() : "";
-            const optionCell = row.querySelector("div[class*='BookingListView__option']");
-            const option = optionCell ? optionCell.innerText.trim() : "";
-            const requestCell = row.querySelector("div[class*='BookingListView__comment']");
-            const request = requestCell ? requestCell.innerText.trim() : "";
-            const phoneCell = row.querySelector("div[class*='BookingListView__phone']");
-            const phone = phoneCell ? phoneCell.innerText.trim() : "";
-            let durationMin = 30;
-            if (product.includes("2종 시간제") || product.includes("1시간") || product.includes("체험권")) {
-              durationMin = 60;
-            } else if (request.includes("리뷰노트")) {
-              durationMin = 60;
-            }
-            results.push({
-              source: "Naver",
-              name,
-              status,
-              dateStr,
+      const results = [];
+      const rowsLocator = page.locator("div[class*='BookingListView__list-contents']");
+      const rowCount = await rowsLocator.count();
+      console.log(`[ScraperService] Found ${rowCount} bookings in list`);
+      for (let i = 0; i < rowCount; i++) {
+        try {
+          const row = rowsLocator.nth(i);
+          await row.locator("a[class*='BookingListView__contents-user']").click();
+          await page.waitForSelector("div[class*='Detail__body-container']", { timeout: 5e3 });
+          const detail = await page.evaluate(() => {
+            const getText2 = (root2, selector) => {
+              const el = root2.querySelector(selector);
+              return el ? el.innerText.trim() : "";
+            };
+            const userName = getText2(document, "span[class*='Summary__name__']");
+            const phoneEl = document.querySelector("a[href^='tel:']");
+            const userPhone = phoneEl ? phoneEl.innerText.trim() : "";
+            const items2 = Array.from(document.querySelectorAll(".Summary__item__MAL-w, .Summary__item__eiRCE"));
+            let dateStr = "";
+            let product = "";
+            let options = "";
+            let bookingNo = "";
+            items2.forEach((div) => {
+              const titleEl = div.querySelector("[class*='title']");
+              const descEl = div.querySelector("[class*='dsc']");
+              if (titleEl && descEl) {
+                const title2 = titleEl.innerText;
+                const desc = descEl.innerText;
+                if (title2.includes("이용일시")) dateStr = desc;
+                if (title2.includes("상품")) product = desc;
+                if (title2.includes("옵션")) options = desc;
+                if (title2.includes("예약번호")) bookingNo = desc;
+              }
+            });
+            const status = getText2(document, "span[data-tst_booking_status='0']");
+            return {
+              user_name: userName,
+              user_phone: userPhone,
+              booking_no: bookingNo,
+              date_string: dateStr,
               product,
-              option,
-              request,
-              phone,
-              durationMin
+              options,
+              status
+            };
+          });
+          const simpleDate = detail.date_string.replace(/(\d{4})\. (\d{1,2})\. (\d{1,2}).*/, "$1-$2-$3");
+          results.push({
+            ...detail,
+            date: simpleDate,
+            source: "Naver"
+          });
+          console.log(`[ScraperService] Scraped: ${detail.user_name} (${detail.date_string})`);
+          await page.goBack();
+          await page.waitForSelector("div[class*='BookingListView__list-contents']", { timeout: 5e3 });
+        } catch (e) {
+          console.error(`[ScraperService] Error scraping row ${i}:`, e);
+          if (page.url().includes("booking-list-view/users")) {
+            await page.goBack().catch(() => {
             });
-          } catch (e) {
-          }
-        });
-        return results;
-      });
-      console.log(`[ScraperService] Found ${bookings.length} bookings`);
-      return bookings;
-    } catch (e) {
-      console.error("[ScraperService] Error getting Naver bookings:", e);
-      return [];
-    }
-  }
-  async getKakaoBookings() {
-    console.log("[ScraperService] getKakaoBookings called");
-    try {
-      await this.start();
-      if (!this.page) return [];
-      const page = this.page;
-      await page.goto("https://business.kakao.com/_hxlxnIs/chats", { waitUntil: "domcontentloaded" });
-      if (page.url().includes("login")) {
-        console.error("[ScraperService] Login required for Kakao");
-        return [];
-      }
-      try {
-        await page.waitForSelector("li", { timeout: 1e4 });
-      } catch (e) {
-        return [];
-      }
-      const chats = await page.evaluate(() => {
-        const results = [];
-        const items2 = document.querySelectorAll("li");
-        items2.forEach((item) => {
-          const text2 = item.innerText;
-          if (text2.length > 10 && text2.includes("\n")) {
-            results.push({
-              source: "Kakao",
-              raw_data: text2.replace(/\n/g, " ").substring(0, 50) + "...",
-              name: text2.split("\n")[0] || "Unknown",
-              // Guessing name is first line
-              dateStr: "Recent"
+            await page.waitForSelector("div[class*='BookingListView__list-contents']", { timeout: 5e3 }).catch(() => {
             });
           }
-        });
-        return results;
-      });
-      return chats;
+        }
+      }
+      return results;
     } catch (e) {
-      console.error("[ScraperService] Error getting Kakao bookings:", e);
+      console.error("[ScraperService] Error in scrapeNaverReservations:", e);
       return [];
     }
   }
@@ -25788,7 +25995,7 @@ var pkgUp = { exports: {} };
 var findUp$1 = { exports: {} };
 var locatePath$1 = { exports: {} };
 var pathExists$1 = { exports: {} };
-const fs$2 = require$$0$2;
+const fs$2 = fs$3;
 pathExists$1.exports = (fp) => new Promise((resolve2) => {
   fs$2.access(fp, (err) => {
     resolve2(!err);
@@ -25876,7 +26083,7 @@ var pLocate$1 = (iterable, tester, opts) => {
   return Promise.all(items2.map((el) => checkLimit(finder, el))).then(() => {
   }).catch((err) => err instanceof EndError ? err.value : Promise.reject(err));
 };
-const path$5 = require$$0$3;
+const path$5 = require$$0$2;
 const pathExists = pathExistsExports;
 const pLocate = pLocate$1;
 locatePath$1.exports = (iterable, options) => {
@@ -25896,7 +26103,7 @@ locatePath$1.exports.sync = (iterable, options) => {
   }
 };
 var locatePathExports = locatePath$1.exports;
-const path$4 = require$$0$3;
+const path$4 = require$$0$2;
 const locatePath = locatePathExports;
 findUp$1.exports = (filename, opts = {}) => {
   const startDir = path$4.resolve(opts.cwd || "");
@@ -25937,7 +26144,7 @@ pkgUp.exports = async ({ cwd } = {}) => findUp("package.json", { cwd });
 pkgUp.exports.sync = ({ cwd } = {}) => findUp.sync("package.json", { cwd });
 var pkgUpExports = pkgUp.exports;
 var envPaths$1 = { exports: {} };
-const path$3 = require$$0$3;
+const path$3 = require$$0$2;
 const os = require$$1$3;
 const homedir = os.homedir();
 const tmpdir = os.tmpdir();
@@ -26166,7 +26373,7 @@ const retryifySync = (fn, isRetriableError) => {
 };
 retryify.retryifySync = retryifySync;
 Object.defineProperty(fs$1, "__esModule", { value: true });
-const fs = require$$0$2;
+const fs = fs$3;
 const util_1$S = require$$1$4;
 const attemptify_1 = attemptify;
 const fs_handlers_1 = fs_handlers;
@@ -26248,7 +26455,7 @@ const Scheduler = {
 scheduler.default = Scheduler;
 var temp = {};
 Object.defineProperty(temp, "__esModule", { value: true });
-const path$2 = require$$0$3;
+const path$2 = require$$0$2;
 const consts_1$1 = consts;
 const fs_1$1 = fs$1;
 const Temp = {
@@ -26297,7 +26504,7 @@ process.on("exit", Temp.purgeSyncAll);
 temp.default = Temp;
 Object.defineProperty(dist$1, "__esModule", { value: true });
 dist$1.writeFileSync = dist$1.writeFile = dist$1.readFileSync = dist$1.readFile = void 0;
-const path$1 = require$$0$3;
+const path$1 = require$$0$2;
 const consts_1 = consts;
 const fs_1 = fs$1;
 const lang_1 = lang;
@@ -40067,8 +40274,8 @@ var onetimeExports = onetime$1.exports;
   var _Conf_validator, _Conf_encryptionKey, _Conf_options, _Conf_defaultValues;
   Object.defineProperty(exports$1, "__esModule", { value: true });
   const util_12 = require$$1$4;
-  const fs2 = require$$0$2;
-  const path2 = require$$0$3;
+  const fs2 = fs$3;
+  const path2 = require$$0$2;
   const crypto = require$$3$3;
   const assert = require$$4$1;
   const events_1 = require$$5$1;
@@ -40509,7 +40716,7 @@ var onetimeExports = onetime$1.exports;
   module2.exports.default = Conf2;
 })(source, source.exports);
 var sourceExports = source.exports;
-const path = require$$0$3;
+const path = require$$0$2;
 const { app, ipcMain, ipcRenderer, shell } = require$$1$2;
 const Conf = sourceExports;
 let isInitialized = false;
@@ -40581,7 +40788,7 @@ function createWindow() {
     width: 1400,
     height: 900,
     webPreferences: {
-      preload: require$$0$3.join(__dirname, "preload.js"),
+      preload: require$$0$2.join(__dirname, "preload.js"),
       contextIsolation: true,
       nodeIntegration: false
     }
@@ -40589,7 +40796,7 @@ function createWindow() {
   if (process.env.NODE_ENV === "development" || !require$$1$2.app.isPackaged) {
     mainWindow.loadURL("http://localhost:5173");
   } else {
-    mainWindow.loadFile(require$$0$3.join(__dirname, "../dist/index.html"));
+    mainWindow.loadFile(require$$0$2.join(__dirname, "../dist/index.html"));
   }
 }
 require$$1$2.app.whenReady().then(createWindow);
@@ -40646,7 +40853,7 @@ require$$1$2.ipcMain.handle("scraper:kakaoLogin", async () => {
 });
 require$$1$2.ipcMain.removeHandler("scraper:getNaverBookings");
 require$$1$2.ipcMain.handle("scraper:getNaverBookings", async () => {
-  return await scraperService.getNaverBookings();
+  return await scraperService.scrapeNaverReservations();
 });
 require$$1$2.ipcMain.removeHandler("scraper:getKakaoBookings");
 require$$1$2.ipcMain.handle("scraper:getKakaoBookings", async () => {
@@ -40654,7 +40861,24 @@ require$$1$2.ipcMain.handle("scraper:getKakaoBookings", async () => {
 });
 require$$1$2.ipcMain.removeHandler("erp:createReservation");
 require$$1$2.ipcMain.handle("erp:createReservation", async (_event, data2) => {
-  store.get("erp.id");
-  store.get("erp.password");
-  return await erpService.createReservation(data2);
+  return await erpService.createReservation(data2.data);
+});
+require$$1$2.ipcMain.handle("erp:registerToErp", async (_event, naverData) => {
+  return await erpService.registerToErp(naverData);
+});
+require$$1$2.ipcMain.handle("erp:syncNaver", async (_event, { dryRun }) => {
+  console.log(`[Main] Starting Naver Sync (DryRun: ${dryRun})`);
+  const bookings = await scraperService.scrapeNaverReservations();
+  console.log(`[Main] Scraped ${bookings.length} bookings`);
+  const results = [];
+  for (const booking of bookings) {
+    const success = await erpService.registerToErp(booking, dryRun);
+    results.push({
+      name: booking.user_name,
+      status: success ? "Success" : "Failed",
+      dryRun
+    });
+    await new Promise((r) => setTimeout(r, 1e3));
+  }
+  return results;
 });

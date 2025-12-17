@@ -30,7 +30,9 @@ electron.contextBridge.exposeInMainWorld("api", {
     deleteHistory: (id, history) => electron.ipcRenderer.invoke("erp:deleteHistory", { id, history }),
     updateHistory: (id, oldHistory, newHistory) => electron.ipcRenderer.invoke("erp:updateHistory", { id, oldHistory, newHistory }),
     setHeadless: (headless) => electron.ipcRenderer.invoke("erp:setHeadless", { headless }),
-    fetchMembers: (options) => electron.ipcRenderer.invoke("erp:fetchMembers", options)
+    fetchMembers: (options) => electron.ipcRenderer.invoke("erp:fetchMembers", options),
+    registerToErp: (naverData) => electron.ipcRenderer.invoke("erp:registerToErp", naverData),
+    syncNaver: (dryRun) => electron.ipcRenderer.invoke("erp:syncNaver", { dryRun })
   },
   member: {
     list: () => electron.ipcRenderer.invoke("member:list"),

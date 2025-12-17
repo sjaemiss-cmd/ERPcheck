@@ -4,7 +4,7 @@
     "version": "1.0.0",
     "main": "dist-electron/main.js",
     "scripts": {
-        "dev": "vite",
+        "dev": "chcp 65001 && vite",
         "electron:start": "npm run dev",
         "build": "tsc && vite build && electron-builder",
         "preview": "vite preview"

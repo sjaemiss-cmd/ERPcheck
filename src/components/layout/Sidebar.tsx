@@ -1,4 +1,5 @@
 import { Home, BookOpen, Calendar, Settings } from 'lucide-react'
+import logo from '../../assets/logo.png'
 
 interface SidebarProps {
     currentTab: 'dashboard' | 'education' | 'reservation' | 'settings'
@@ -15,9 +16,11 @@ export function Sidebar({ currentTab, onTabChange }: SidebarProps) {
 
     return (
         <div className="w-64 bg-slate-800 text-white flex flex-col">
-            <div className="p-4 border-b border-slate-700">
-                <h1 className="text-xl font-bold">Operation Master</h1>
-                <p className="text-slate-400 text-sm">ERP 자동화 도구</p>
+            <div className="p-4 border-b border-slate-700 flex items-center gap-3">
+                <img src={logo} alt="Logo" className="w-10 h-10 object-contain" />
+                <div>
+                    <h1 className="text-lg font-bold leading-tight">Operation<br />Master</h1>
+                </div>
             </div>
             <nav className="flex-1 p-4 space-y-2">
                 {menuItems.map(item => (

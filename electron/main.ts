@@ -103,7 +103,7 @@ ipcMain.handle('scraper:kakaoLogin', async () => {
 
 ipcMain.removeHandler('scraper:getNaverBookings')
 ipcMain.handle('scraper:getNaverBookings', async () => {
-    return await scraperService.getNaverBookings()
+    return await scraperService.scrapeNaverReservations()
 })
 
 ipcMain.removeHandler('scraper:getKakaoBookings')
@@ -114,20 +114,34 @@ ipcMain.handle('scraper:getKakaoBookings', async () => {
 // ERP Create Reservation Wrapper (To Inject Credentials)
 ipcMain.removeHandler('erp:createReservation')
 ipcMain.handle('erp:createReservation', async (_event, data) => {
-    // Ensure logged in
-    const id = store.get('erp.id') as string;
-    const password = store.get('erp.password') as string;
+    // ... existing wrapper logic ...
+    return await erpService.createReservation(data.data) // Fixed: unpack data structure properly
+})
 
-    if (id && password) {
-        // We might want to ensure login implicitly here or in ErpService.
-        // For now, let's assume ErpService.start() handles browser launch, 
-        // but login state is separate.
-        // Let's pass creds to createReservation if needed?
-        // Actually ErpService stores state in browser session logic.
-        // But if browser restarted, we need relogin.
-        // Let's call login first just in case? Or rely on ErpService robust check.
-        // ErpService.createReservation uses existing page. 
-        // Let's just forward call.
+ipcMain.handle('erp:registerToErp', async (_event, naverData) => {
+    return await erpService.registerToErp(naverData)
+})
+
+ipcMain.handle('erp:syncNaver', async (_event, { dryRun }) => {
+    console.log(`[Main] Starting Naver Sync (DryRun: ${dryRun})`);
+
+    // 1. Scrape
+    const bookings = await scraperService.scrapeNaverReservations();
+    console.log(`[Main] Scraped ${bookings.length} bookings`);
+
+    const results = [];
+    for (const booking of bookings) {
+        // 2. Register (Sync)
+        const success = await erpService.registerToErp(booking, dryRun);
+        results.push({
+            name: booking.user_name,
+            status: success ? 'Success' : 'Failed',
+            dryRun: dryRun
+        });
+
+        // Brief pause to fail safely
+        await new Promise(r => setTimeout(r, 1000));
     }
-    return await erpService.createReservation(data)
+
+    return results;
 })

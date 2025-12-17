@@ -37,6 +37,8 @@ contextBridge.exposeInMainWorld('api', {
         updateHistory: (id: string, oldHistory: any, newHistory: any) => ipcRenderer.invoke('erp:updateHistory', { id, oldHistory, newHistory }),
         setHeadless: (headless: boolean) => ipcRenderer.invoke('erp:setHeadless', { headless }),
         fetchMembers: (options?: { months: number }) => ipcRenderer.invoke('erp:fetchMembers', options),
+        registerToErp: (naverData: any) => ipcRenderer.invoke('erp:registerToErp', naverData),
+        syncNaver: (dryRun: boolean) => ipcRenderer.invoke('erp:syncNaver', { dryRun }),
     },
     member: {
         list: () => ipcRenderer.invoke('member:list'),
