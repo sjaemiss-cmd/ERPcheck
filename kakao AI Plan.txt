@@ -1,0 +1,399 @@
+프로젝트: ERPcheck - 카카오톡 지능형 예약 자동화 (Project K-Brain)
+1. 핵심 목표 (Core Objective)
+"비정형의 고객 언어를 정형화된 ERP 데이터로 실시간 변환한다."
+
+카카오톡 비즈니스 채널로 유입되는 불규칙한 자연어 대화("내일 12시 1종 돼요?")를 AI(LLM)를 통해 완벽한 예약 데이터로 구조화하고, 기존 레거시 ERP 시스템과 교차 검증하여 단 1번의 클릭으로 예약 확정 및 고객 응대까지 완료하는 초자동화(Hyper-automation) 시스템을 구축한다.
+
+2. 해결하려는 문제 (Pain Points)
+단절된 워크플로우: 카카오톡 창과 ERP 창을 오가며 날짜와 이름을 수동으로 복사/붙여넣기 하는 비효율 발생.
+
+인적 오류 위험: "다음 주 화요일" 같은 상대적 날짜 계산 실수, 동명이인 착각, 중복 예약 등 휴먼 에러 상존.
+
+응대 지연: 바쁜 시간대에 단순 예약 문의 응대로 인해 매니저의 리소스가 낭비됨.
+
+3. 기술적 아키텍처 (Technical Pillars)
+이 시스템은 3단계 파이프라인으로 작동한다.
+
+The Eyes (수집): Playwright 기반의 헤드리스 브라우저가 카카오톡 대화 내용을 실시간으로 스캔하고, 안 읽은 메시지만 정밀 타격하여 추출한다.
+
+The Brain (해석): OpenAI (GPT-4o-mini)가 투입되어 자연어를 분석한다.
+
+불명확한 날짜("내일 모레")를 정확한 YYYY-MM-DD로 변환.
+
+예약 의도를 파악하여 JSON 데이터로 정규화.
+
+매니저의 톤앤매너를 학습한 '답장 초안' 자동 생성.
+
+The Hands (실행): 기존 ERPcheck 엔진을 활용하여 ERP 내 회원 정보를 조회하고, 중복 여부를 판단한 뒤, 물리적인 예약 등록과 카카오톡 답장 발송을 수행한다.
+
+4. 핵심 원칙 (Guiding Principles)
+Human-in-the-Loop (인간 개입): AI는 제안하고, 인간은 승인한다. 모든 예약은 매니저의 '승인 버튼' 클릭 시에만 최종 실행되어야 한다. (오작동 방지)
+
+Defensive Engineering (방어적 설계): ERP 서버가 느리거나 카카오톡 UI가 변경되어도 프로그램이 멈추지 않고 스스로 복구하거나 안전하게 종료되어야 한다.
+
+Atomic Modularity (원자적 모듈화): 모든 기능은 60개의 최소 단위로 쪼개져 개발되며, 각 모듈은 독립적으로 테스트 가능해야 한다.
+
+Phase 1. [카카오] 데이터 수집 (The Eyes) [완료]
+단순히 "읽어와"가 아니라, 채팅방 목록을 순회하고 읽지 않은 메시지만 골라내는 정밀 타격 로직이야.
+
+1. 카카오 비즈니스 접속 및 세션 확보 [V]
+
+프롬프트: "Playwright를 사용하여 'https://business.kakao.com/_hxlxnIs/chats'에 접속해. 내가 수동으로 로그인할 수 있도록 pause를 걸고, 로그인 완료 후 쿠키와 스토리지 상태를 kakao_auth.json으로 저장하는 스크립트를 짜줘."
+
+2. 채팅방 목록 컨테이너 식별 [V]
+
+행동: 채팅 목록 탭의 HTML 전체 복사.
+
+<div class="info_chat"><ul class="tab_g2"><li class="on"><a class="link_tab" href="/_hxlxnIs/chats">전체 채팅목록</a></li><li class=""><a class="link_tab" href="/_hxlxnIs/chats/starred">중요채팅 목록</a></li><li class=""><a class="link_tab" href="/_hxlxnIs/chats/blocked">차단친구 목록</a></li></ul><strong class="screen_out">채팅목록</strong><div class="head_search"><div class="opt_g2 opt_g2"><div class="screen_out"></div><span class="screen_out">선택내용 : </span><button class=" btn_opt" type="button">진행 중 상담<span class="ico_rocket ico_arr"></span></button></div><div class="opt_g2 opt_g2"><div class="screen_out"></div><span class="screen_out">선택내용 : </span><button class=" btn_opt" type="button">전체<span class="ico_rocket ico_arr"></span></button></div><div class="search_g "><form action="#"><fieldset><legend class="screen_out">채팅방 이름 검색 폼</legend><div class="box_tf "><input type="text" class="tf_g" placeholder="채팅방 이름 검색" name="keyword" value=""><button type="submit" class="btn_search"><span class="ico_rocket ico_search">검색</span></button></div></fieldset></form></div><button type="button" class="btn_filter">필터상세<span class="ico_rocket ico_arr"></span></button></div><div class="head_board"><button type="button" class="btn_g" style="width: 40px;"><span class="ico_rocket"></span>선택</button><button type="button" class="btn_g btn_add dimmed_g" disabled=""><span class="ico_rocket"></span>친구그룹에 추가</button><button type="button" class="btn_g btn_important dimmed_g" disabled=""><span class="ico_rocket ico_important"></span>중요표시</button><button type="button" class="btn_g btn_read dimmed_g" disabled="">읽음</button><button type="button" class="btn_g btn_charge dimmed_g" disabled="">담당자 지정</button><button type="button" class="btn_g btn_complete dimmed_g" disabled="">상담 완료하기</button><div class="common_btn"><button type="button" class="btn_g btn_out dimmed_g" disabled=""><span class="ico_rocket"></span>채팅방 나가기</button><button type="button" class="btn_g btn_block dimmed_g" disabled=""><span class="ico_rocket"></span>친구차단</button><button type="button" class="btn_help btn_help2"><span class="ico_rocket">1:1채팅 가이드 안내</span></button></div></div><div style="overflow: visible; width: 0px;"><div aria-label="grid" aria-readonly="true" class="ReactVirtualized__Grid ReactVirtualized__List list_board" role="grid" tabindex="0" style="box-sizing: border-box; direction: ltr; height: 683px; position: relative; width: 940px; will-change: transform; overflow: hidden;"><div class="ReactVirtualized__Grid__innerScrollContainer" role="row" style="width: auto; height: 69px; max-width: 940px; max-height: 69px; overflow: hidden; position: relative;"><li style="height: 69px; left: 0px; position: absolute; top: 0px; width: 100%;"><div class="item_inp"><label for="chat-select-4959368730454795" class="lab_g"><span><input type="checkbox" id="chat-select-4959368730454795" class="inp_g" value=""><span class="ico_rocket ico_check"></span></span></label></div><div class="item_important"><button type="button" class="btn_important"><span class="ico_rocket ico_star">중요</span></button><div class="layer_tooltip" style="display: none;"><p>중요 표시된 채팅방입니다. 해제를 원하시면<br> 별표 아이콘을 클릭해 주세요.</p><span class="ico_arr"></span></div></div><a class="link_chat" style="cursor: pointer;"><div class="item_info"><span class="wrap_thumb"><img role="presentation" src="https://img1.daumcdn.net/thumb/C100x100.mplusfriend/?fname=https%3A%2F%2Fp.kakaocdn.net%2Fth%2Ftalkp%2FwpYEHQWFvt%2F3hhGC2faKLpGPEprmQeY00%2Fdkiuqs_110x110_c.jpg" style="position: absolute; left: 0px; top: 0px; width: 40px; height: 40px;"></span><strong class="tit_info"><span class="txt_name">양나경.장롱12</span></strong><div class="wrap_bubble"><div class="bubble_g"><p class="txt_info">27일(토) 11~13시 예약되었습니다</p><span class="ico_arr"></span></div></div></div><span class="txt_date"><span>오후 12:36</span></span></a></li></div></div></div><div class="resize-triggers"><div class="expand-trigger"><div style="width: 941px; height: 856px;"></div></div><div class="contract-trigger"></div></div></div>
+
+프롬프트: "이 HTML에서 좌측 사이드바의 **채팅방 리스트(<ul> 등)**와 개별 **채팅방 항목(<li>)**의 Selector를 찾아줘. 특히 항목 내부의 사용자 이름과 마지막 메시지 미리보기가 있는 태그를 특정해줘."
+
+3. '안 읽은 메시지' 필터링 로직 [V]
+
+행동: '안 읽음' 빨간 뱃지가 붙은 채팅방과 안 붙은 채팅방 HTML 각각 복사.
+
+1)안읽음 뱃지가 붙은 채팅방
+<strong class="tit_info"><span class="txt_name">홍재영</span><span class="num_round">1</span></strong>
+
+2)읽은 채팅방
+<strong class="tit_info"><span class="txt_name">양나경.장롱12</span></strong>
+
+프롬프트: "두 HTML을 비교해서, **'읽지 않음' 뱃지(숫자)**가 존재하는지 여부를 판단하는 CSS Selector 조건을 찾아줘. 우리는 이 뱃지가 있는 방만 클릭할 거야."
+
+4. 채팅방 진입 및 대기 [V]
+
+프롬프트: "목록의 첫 번째 '안 읽은 채팅방'을 클릭(click())한 후, 새로운 대화창 페이지가 로딩될 때까지 대기(waitForSelector)하는 코드를 짜줘."
+
+5. 대화 내용 파싱 (발화자 구분) [V]
+
+행동: 대화창 내부의 말풍선들이 포함된 HTML 복사.
+
+<div><div class="item_date"><em class="emph_date"><span>2025.12.18 목요일</span></em></div><div class="item_chat item_start item_me item_new type_card"><div class="wrap_cont"><strong class="txt_user">고수의 운전면허 도봉점님이 보냄 <button type="button" class="btn_tooltip"><span class="ico_chat ico_guide">보낸 메시지 가이드</span><span class="layer_tooltip4"><span class="txt_tooltip">보낸 사람의 이름은 관리자만 확인할 수 있습니다.</span><span class="ico_chat ico_arr"></span></span></button></strong><div class="set_chat"><div class="bubble_chat"><div class="box_bubble"><div class="info_chat"><div class="area_info"><div class="area_info"><p class="tit_item" style="max-height: 2000px; -webkit-line-clamp: 100; display: -webkit-box; overflow: hidden; text-overflow: ellipsis; -webkit-box-orient: vertical; white-space: normal; word-break: break-all;"><span>'고수의 운전면허 도봉점' 채널을 추가해 주셔서 감사합니다.</span><br><span>앞으로 다양한 소식과 혜택/정보를 메시지로 받으실 수 있습니다.</span><br><span></span><br><span>채널 추가 일시(한국시간 기준): 2025년 12월 18일 11:16 </span><br><span>수신거부: 홈&gt;채널 차단</span></p></div></div></div></div></div><div class=""><span class="txt_time"></span></div></div></div></div><div class="item_chat item_me item_new type_card"><div class="wrap_cont"><div class="set_chat"><strong class="txt_user">(광고)</strong><div class="bubble_chat"><div class="box_bubble"><a class="link_pic" style="cursor: pointer;"><span class="wrap_thumb" style="background-image: url(&quot;http://k.kakaocdn.net/dn/uNLfV/btsotZi58dd/mAhiGqKj17mfih9wZok5E1/img_l.jpg&quot;); background-size: cover; background-position: 50% 50%; width: 179.944px; height: 240px; min-height: 240px;"></span></a><div class="info_chat"><div class="area_info"><div class="area_info"><p class="tit_item" style="max-height: 2000px; -webkit-line-clamp: 100; display: -webkit-box; overflow: hidden; text-overflow: ellipsis; -webkit-box-orient: vertical; white-space: normal; word-break: break-all;"><span>안녕하세요. '고수의 운전면허 도봉점'입니다.</span><br><span></span><br><span>'고수의 운전면허'는 시뮬레이터를 이용하여 연습할 수 있는 실내 연습장으로 면허 취득을 위한 연습은 물론이고 초보운전, 장롱면허이신 분들께서 운전 연습도 해보실 수 있습니다.</span><br><span></span><br><span>궁금하신 사항이 있으시면 언제든지 편하게 메세지 남겨주세요.</span><br><span>채팅이 가능한 시간에 확인 후 답장 드리겠습니다.</span><br><span></span><br><span>감사합니다.</span><br><span></span><br><span>※운영시간</span><br><span>평일 09:00~21:00</span><br><span>토요일(공휴일) 10:00~18:00</span><br><span>일요일 휴무</span></p></div></div><div class="wrap_btn"><button type="button" class="link_name" style="display: block; width: 100%; cursor: pointer;"><span>지인추천</span></button><button type="button" class="link_name" style="display: block; width: 100%; cursor: pointer;"><span>동시등록</span></button></div></div></div></div><div class="area_txt"><em class="txt_denial"><span class="emph_bold">수신거부</span> 홈 &gt; 채널차단</em><span class="txt_time"><span>오전</span><span class="num_txt"><span>11:16</span></span></span></div></div></div></div><div class="item_chat item_start"><div class="wrap_thumb" style="position: absolute; left: 15px;"><img alt="프로필 사진" src="https://img1.daumcdn.net/thumb/C100x100.mplusfriend/?fname=https%3A%2F%2Fp.kakaocdn.net%2Fth%2Ftalkp%2FwpYEHQWFvt%2F3hhGC2faKLpGPEprmQeY00%2Fdkiuqs_110x110_c.jpg" role="presentation" draggable="false" style="width: 30px; height: 30px; vertical-align: middle;"></div><div class="wrap_cont"><strong class="txt_user">나경</strong><div class="set_chat"><div class="bubble_chat"><div class="box_bubble"><p class="txt_chat"><span>양나경</span></p><span class="ico_rocket ico_arr"></span></div></div><div class=""><span class="txt_time"><span>오전</span><span class="num_txt"><span>11:17</span></span></span></div></div></div></div><div class="item_chat item_start item_me item_save"><div class="wrap_cont"><strong class="txt_user">조현숙님이 보냄 <button type="button" class="btn_tooltip"><span class="ico_chat ico_guide">보낸 메시지 가이드</span><span class="layer_tooltip4"><span class="txt_tooltip">보낸 사람의 이름은 관리자만 확인할 수 있습니다.</span><span class="ico_chat ico_arr"></span></span></button></strong><div class="set_chat"><a target="_blank" rel="noopener noreferrer" class="item_expiry link_pic" draggable="false" style="width: 240px; height: 148.8px; cursor: pointer; background: rgb(248, 248, 248);"><img draggable="false" src="https://k.kakaocdn.net/dna/boKJjl/bl8zoGBBCAR/3V2jNswfjcT7b7Ilm1prcl/i_s2ao1o.jpg?credential=P2yoHVwtnqqJM5uful7K5Ufup3ht029u&amp;expires=1766035510&amp;allow_ip=&amp;allow_referer=&amp;signature=%2BSK05%2FhWJJD3mxIuB14lzEt4%2F%2F8%3D&amp;knm=i_s2ao1o.jpg&amp;convert=c_resize&amp;w=240&amp;h=148" alt="사진" class="thumb_g" style="width: 240px; height: 148.8px; background: rgb(248, 248, 248);"><span class="util_g"></span></a><a href="/api/profiles/_hxlxnIs/chats/4959368730454795/chatlogs/3733660649281101354/image?dl=true" download="" class="btn_save"><span class="ico_chat ico_download">저장하기</span></a><div class=""><span class="txt_time"></span></div></div></div></div><div class="item_chat item_me item_save"><div class="wrap_cont"><div class="set_chat"><a target="_blank" rel="noopener noreferrer" class="item_expiry link_pic" draggable="false" style="width: 240px; height: 339.435px; cursor: pointer; background: rgb(248, 248, 248);"><img draggable="false" src="https://k.kakaocdn.net/dna/lfYlw/bl8zdNOmzga/WNvAtraP2PGqr5TKT7ya7r/i_wysx9o.jpg?credential=P2yoHVwtnqqJM5uful7K5Ufup3ht029u&amp;expires=1766035510&amp;allow_ip=&amp;allow_referer=&amp;signature=4vZj5rbqADm8H5MN3Yt0Xr%2FEhsA%3D&amp;knm=i_wysx9o.jpg&amp;convert=c_resize&amp;w=240&amp;h=339" alt="사진" class="thumb_g" style="width: 240px; height: 339.435px; background: rgb(248, 248, 248);"><span class="util_g"></span></a><a href="/api/profiles/_hxlxnIs/chats/4959368730454795/chatlogs/3733660649408016477/image?dl=true" download="" class="btn_save"><span class="ico_chat ico_download">저장하기</span></a><div class=""><span class="txt_time"><span>오전</span><span class="num_txt"><span>11:17</span></span></span></div></div></div></div><div class="item_chat item_start item_me item_aiauto_me"><div class="wrap_cont"><strong class="txt_user">조현숙님이 보냄 <button type="button" class="btn_tooltip"><span class="ico_chat ico_guide">보낸 메시지 가이드</span><span class="layer_tooltip4"><span class="txt_tooltip">보낸 사람의 이름은 관리자만 확인할 수 있습니다.</span><span class="ico_chat ico_arr"></span></span></button></strong><div class="set_chat"><div class="bubble_chat"><div class="box_bubble"><p class="txt_chat"><span>27일(토) 11~13시 예약되었습니다</span></p><span class="ico_rocket ico_arr"></span></div></div><div class=""><span class="txt_time"><span class="emph_g2">1</span><span>오후</span><span class="num_txt"><span>12:36</span></span></span></div></div></div></div></div>
+
+프롬프트: "대화창 HTML이야. 여기서 class 명을 분석해 **'고객이 보낸 말풍선'**과 **'상담사가 보낸 말풍선'**을 구분하는 로직을 찾아줘. 고객 말풍선 중 가장 마지막(최신) 것의 텍스트만 추출해야 해."
+
+6. 고객 프로필 정보 추출 [V]
+
+행동: 좌측 상단 고객 프로필 영역 HTML 복사.
+
+<div class="area_tit"><strong class="tit_user">양나경.장롱12</strong><span class="badge_g type2">친구</span></div>
+
+프롬프트: "현재 열린 채팅방의 **고객명(닉네임)**을 텍스트로 추출하는 Selector를 찾아줘. 이게 ERP 검색의 키가 될 거야."
+
+Phase 2. [LLM] 지능형 분석 (The Brain) [완료]
+API 연결만 하는 게 아니라, AI를 '가스라이팅'해서 완벽한 포맷을 뱉게 만드는 과정이야.
+
+7. OpenAI 클라이언트 설정 [V] (Gemini로 대체 완료)
+
+프롬프트: "openai npm 패키지를 설치하고, .env에서 OPENAI_API_KEY를 불러와 클라이언트를 초기화하는 LlmService.ts 파일을 만들어줘."
+
+8. JSON 스키마 정의 (Zod) [V]
+
+프롬프트: "LLM이 무조건 지켜야 할 출력 형식을 TypeScript 인터페이스와 Zod 스키마로 정의해줘.
+
+isBooking: 예약 관련 문의인가? (bool)
+
+name: 고객 이름 (string)
+
+date: 추출된 날짜 (YYYY-MM-DD, 없으면 null)
+
+time: 추출된 시간 (HH:mm, 없으면 null)
+
+course: 과정 (1종/2종 등, 없으면 null)
+
+reply: 고객에게 보낼 추천 답장 (string)
+
+requiresManualCheck: AI가 확신이 없으면 true (bool)"
+
+9. 시스템 프롬프트 작성 (Context 주입) [V]
+
+프롬프트: "AI에게 부여할 페르소나와 규칙을 담은 System Prompt 문자열을 작성해줘.
+
+규칙 1: 오늘은 ${new Date()}(${요일})이다. 이를 기준으로 '내일', '다음주 금요일'을 정확한 날짜로 계산해라.
+
+규칙 2: 1종 보통, 2종 자동, 도로연수 등 키워드를 민감하게 캐치해라.
+
+규칙 3: 답장은 정중하되, 간결하게 '매니저' 톤으로 작성해라."
+
+10. LLM 요청 함수 구현 [V]
+
+프롬프트: "고객 메시지, 현재 날짜 정보를 받아서 OpenAI API(gpt-4o-mini)에 요청을 보내고, 응답을 받아 JSON으로 파싱하여 반환하는 analyzeMessage(text) 비동기 함수를 짜줘."
+
+Phase 3. [ERP] 회원 매칭 (The Filter) [완료]
+가장 까다로운 논리 구조야. 동명이인, 가입일 계산 등 변수가 많아.
+
+11. ERP 회원 검색 페이지 이동 [V]
+
+프롬프트: "Playwright로 ERP의 '회원 검색' 메뉴를 클릭하고 페이지가 로드될 때까지 기다리는 함수를 짜줘."
+
+12. 검색 실행 [V]
+
+행동: 검색바와 검색 버튼 HTML 복사.
+
+프롬프트: "검색 입력창(input)을 비우고(fill('')), 카카오에서 가져온 이름(name)을 입력한 뒤, 엔터키나 검색 버튼을 누르는 코드를 짜줘."
+
+13. 검색 결과 테이블 파싱 [V]
+
+행동: 검색 결과가 나온 테이블 HTML 복사.
+
+프롬프트: "결과 테이블의 각 행(tr)을 순회하며, 이름, 전화번호, 등록일(가입일) 데이터를 객체 배열로 추출하는 함수를 짜줘. 데이터가 없으면 빈 배열을 리턴해."
+
+14. 날짜 계산 유틸리티 [V]
+
+프롬프트: "ERP의 날짜 포맷(YYYY.MM.DD 또는 YYYY-MM-DD)을 받아서, 오늘 날짜와 비교해 **'경과 일수(daysPassed)'**를 계산하는 함수를 짜줘. moment.js나 date-fns 없이 순수 JS로 해줘."
+
+15. 타겟 회원 필터링 로직 [V]
+
+프롬프트: "추출된 회원 리스트를 순회하며 다음 조건에 맞는 사람만 남겨줘.
+
+이름이 정확히 일치할 것.
+
+가입일로부터 90일(3개월)이 지나지 않았을 것.
+
+결과가 0명이면 null 리턴.
+
+결과가 1명이면 그 회원 객체 리턴.
+
+결과가 2명 이상이면 error: 'duplicate' 리턴."
+
+Phase 4. [UI] 통합 대시보드 (The Interface)
+사용자가 눈으로 확인하고 승인하는 관제탑을 만드는 과정이야.
+
+16. 레이아웃 분할
+
+프롬프트: "KakaoManager.tsx 컴포넌트를 만들고, 화면을 5:5로 나눠줘. 왼쪽은 LogPanel(처리 로그), 오른쪽은 ActionCard(현재 처리 중인 건)가 뜨도록 레이아웃을 잡아줘."
+
+17. Action Card 디자인
+
+프롬프트: "오른쪽 카드에 표시할 정보야.
+
+헤더: 고객 이름 + 카톡 원본 메시지
+
+AI 분석 결과: 날짜(Input), 시간(Input), 과정(Select) - 수정 가능해야 함
+
+매칭된 회원: 이름, 전화번호, 가입일 (일치하는 회원이 없으면 '신규 고객' 표시)
+
+답장 초안: Textarea (수정 가능)"
+
+18. 상태 관리 (State Management)
+
+프롬프트: "React useState를 써서 현재 진행 단계(status)를 관리해줘.
+
+idle: 대기 중
+
+scanning: 카톡 읽는 중
+
+analyzing: LLM 분석 중
+
+checking_erp: ERP 회원 조회 중
+
+review_required: 사용자 확인 대기 (팝업/카드 표시)
+
+registering: 예약 등록 중
+
+replying: 답장 전송 중
+
+done: 완료"
+
+Phase 5. [Action] 예약 등록 및 답장 (The Hands)
+사용자가 "승인" 버튼을 눌렀을 때 실행되는 실제 물리적 동작이야.
+
+19. 예약 데이터 조립
+
+프롬프트: "사용자가 UI에서 수정한 날짜, 시간, 회원 정보를 바탕으로 ErpService.ts의 registerReservation 함수에 넘길 최종 객체를 생성하는 핸들러를 짜줘."
+
+20. ERP 예약 등록 실행 (기존 모듈 재사용) [V]
+
+프롬프트: "기존에 만든 registerReservation 함수를 호출하되, 만약 해당 시간에 이미 예약이 차 있다면 에러를 throw하고 UI에 알림을 띄우는 try-catch 구문을 완성해줘."
+
+21. 카카오 답장 입력
+
+행동: 카카오 대화창 하단 입력 영역 HTML 복사.
+
+<div class="write_chat3"><div class="wrap_inp"><form action="#none"><fieldset><legend class="screen_out">채팅 메시지 입력 폼</legend><div class="box_tf" style="height: 40px;"><textarea id="chatWrite" class="tf_g" placeholder="메시지 보내기" style="overflow: auto;"></textarea></div><div class="write_menu"><div class="wrap_button"><div class="upload_btn "><input type="file" class="custom uploadInput" multiple="" style="width: 0px;"><button type="button" class="btn_menu" style="position: relative;"><span class="ico_chat ico_attatch"></span></button></div><div class="layer_tooltip4" style="display: none;"><span class="txt_tooltip">파일 전송하기</span><span class="ico_chat ico_arr"></span></div></div><div class="wrap_button"><button class="btn_menu" type="button"><span class="ico_chat ico_answer"></span></button><div class="layer_tooltip4"><span class="txt_tooltip">자주 쓰는 답변 선택</span><span class="ico_chat ico_arr"></span></div></div><div class="wrap_button"><button class="btn_menu" type="button"><span class="ico_chat ico_coupon"></span></button><div class="layer_tooltip4"><span class="txt_tooltip">쿠폰 보내기</span><span class="ico_chat ico_arr"></span></div></div></div><button class="btn_g btn_submit disabled" disabled="" type="button">전송</button></fieldset></form></div></div>
+
+프롬프트: "입력창(textarea)을 클릭하고, UI에서 최종 확정된 답장 텍스트를 타이핑(type)하는 코드를 짜줘. 줄바꿈(\n)이 있으면 Shift+Enter를 누르는 로직이 포함되어야 해."
+
+22. 답장 전송 및 확인
+
+프롬프트: "전송 버튼을 클릭하고, 채팅창에 내 말풍선이 새로 추가되었는지(전송 성공했는지) DOM을 확인하여 검증하는 로직을 추가해줘."
+
+Phase 6. [Loop] 순환 및 예외처리 (The Cycle) [진행 중]
+한 명 처리하고 끝나는 게 아니라, 계속 감시하는 무한 루프 로직이야.
+
+23. 작업 완료 처리 [V]
+
+프롬프트: "현재 채팅방 처리가 끝나면, 뒤로가기 버튼(또는 목록 버튼)을 눌러 다시 채팅방 목록으로 돌아가는 코드를 짜줘."
+
+24. 루프 제어 (Polling)
+
+프롬프트: "startPolling() 함수를 만들어줘. 30초마다 scanUnreadMessages()를 실행하고, 처리할 건이 있으면 멈추고 사용자 승인을 기다리고, 없으면 다시 대기하는 로직이야."
+
+25. 에러 복구
+
+프롬프트: "중간에 네트워크가 끊기거나 요소가 안 보여서 스크립트가 죽으면, 전체 앱을 끄지 말고 에러 로그를 기록한 뒤 home으로 돌아가서 다시 시작하는 재시도(Retry) 로직을 최상위에 감싸줘."
+
+Phase 6. [Advanced Logic] 예외 상황 방어 (The Shield)
+단순 에러 처리가 아니라, "망가진 상태에서 스스로 복구하는" 좀비 같은 생명력을 불어넣는 단계야.
+
+26. LLM 환각(JSON 깨짐) 복구
+
+프롬프트: "가끔 LLM이 완벽한 JSON을 안 주고 Here is the JSON... 같은 사족을 붙일 때가 있어. 응답 문자열에서 {로 시작해서 }로 끝나는 부분만 정규식으로 발라내고, JSON.parse가 실패하면 자동으로 재요청(Retry)을 1회 수행하는 로직을 추가해줘."
+
+27. 카카오/ERP 세션 만료 감지
+
+프롬프트: "페이지 이동 중 URL이 login 페이지로 리다이렉트되거나, 특정 로그인 버튼이 다시 나타나면 '세션 만료'로 간주해. 이때 즉시 작업을 중단하고, 아까 만든 login() 함수를 호출해 세션을 복구한 뒤 하던 작업을 재개하는 SessionGuard 미들웨어를 짜줘."
+
+28. 팝업/공지사항 닫기 (AD-Block)
+
+프롬프트: "ERP나 카카오에 접속했을 때 이벤트 팝업이나 공지사항 모달이 떠서 클릭을 방해할 수 있어. body 맨 위에 z-index가 높은 모달이 있는지 검사해서, 있으면 '닫기'나 '오늘 하루 보지 않기' 버튼을 찾아 누르는 clearPopups() 함수를 만들어줘."
+
+29. 요소 소멸(Stale Element) 처리
+
+프롬프트: "Playwright로 요소를 잡았는데, 페이지가 새로고침되면서 그 요소가 사라지면 에러가 나. ElementHandle을 사용할 때 waitFor와 retry 로직을 섞어서, 요소가 DOM에서 분리(Detached)되면 다시 Selector로 찾아내는 헬퍼 함수를 짜줘."
+
+30. 실행 속도 랜덤화 (Humanize)
+
+프롬프트: "모든 클릭과 타이핑 사이에 Math.random()을 이용한 미세한 지연(50ms ~ 300ms)을 줘. 그리고 마우스 커서도 직선으로 가지 않고 약간 곡선을 그리며 이동하도록 mouse.move 좌표를 생성하는 유틸리티를 만들어줘."
+
+Phase 7. [Data Persistence] 기억과 기록 (The Storage)
+프로그램을 껐다 켜도 중복 처리를 안 하게 만드는 데이터베이스 구축 단계야.
+
+31. 로컬 DB(Lowdb/SQLite) 구축
+
+프롬프트: "electron-store나 lowdb를 설치해. 처리한 채팅방의 messageId나 timestamp, 그리고 처리 상태(성공/실패/보류)를 저장할 로컬 JSON DB 스키마를 정의해줘."
+
+32. 중복 처리 방지 로직
+
+프롬프트: "카톡을 스캔할 때, 메시지의 고유값(시간+내용 해시값)을 생성해. 이 값이 로컬 DB에 이미 'Completed' 상태로 존재하면, LLM 분석 단계로 넘어가지 않고 건너뛰는(Skip) 필터를 2번 단계 직후에 넣어줘."
+
+33. 파일 로깅 시스템 (Winston)
+
+프롬프트: "winston 라이브러리를 써서 로그를 파일로 남겨. 포맷은 [2025-12-18 14:00:01] [INFO] [Kakao] 김철수 고객 메시지 파싱 성공 처럼 나오게 하고, 하루 단위로 로그 파일이 회전(Rotate)되게 해줘."
+
+34. 에러 스냅샷 저장
+
+프롬프트: "try-catch 블록에서 에러가 잡히면, 즉시 page.screenshot()을 찍어 logs/errors/timestamp_error.png로 저장해. 그리고 로그 파일에 해당 이미지 경로를 남겨줘."
+
+Phase 8. [Advanced UI] 사용자 경험 극대화 (The Detail)
+네가 쓸 때 "와, 편하다"라고 느낄 수 있는 디테일 기능들이야.
+
+35. 커스텀 프롬프트 편집기
+
+프롬프트: "설정(Settings) 탭에 'AI 프롬프트 수정' 기능을 넣어줘. 시스템 프롬프트(페르소나)를 코드 하드코딩하지 말고, UI에서 수정해서 저장하면 바로 적용되게 해줘."
+
+36. 알림 소리(Sound Effect)
+
+프롬프트: "새로운 예약 문의가 들어와서 '검토 대기(Review Required)' 상태가 되면, PC 스피커로 '딩동' 알림음이 재생되게 해줘. (HTML5 Audio API 사용)"
+
+37. 트레이 아이콘 상태 표시
+
+프롬프트: "Electron 트레이 아이콘을 활용해. 평소엔 파란색, 작업 중엔 초록색, 에러가 나거나 승인 대기 건이 있으면 빨간색 뱃지가 붙은 아이콘으로 트레이 이미지를 실시간 변경해줘."
+
+38. 진행 상황 프로그레스 바
+
+프롬프트: "UI 상단에 진행 바를 만들어줘. '카톡 읽는 중(20%)' -> '분석 중(50%)' -> 'ERP 검색(70%)' -> '등록 완료(100%)' 과정을 시각적으로 보여주는 컴포넌트를 추가해줘."
+
+39. 수동/자동 모드 토글
+
+프롬프트: "UI에 '완전 자동 모드' 토글 스위치를 만들어. 이걸 켜면 AI 신뢰도(Confidence Score)가 95% 이상일 때 사람 승인 없이 즉시 예약하고 답장까지 보내는 '초고속 모드' 로직을 분기 처리해줘."
+
+Phase 9. [Optimization] 성능 최적화 (The Tuning)
+컴퓨터가 버벅거리지 않게 만드는 기술적인 튜닝이야.
+
+40. 불필요한 리소스 차단
+
+프롬프트: "Playwright가 페이지를 로드할 때 이미지, 폰트, CSS 파일은 다운로드하지 않도록 route.abort()를 설정해줘. 우리는 텍스트와 DOM 구조만 필요하니까 속도를 높이자."
+
+41. 메모리 누수 방지
+
+프롬프트: "1시간 이상 켜두면 크롬 프로세스 메모리가 찰 수 있어. 채팅방 10개를 처리할 때마다 브라우저 컨텍스트를 완전히 닫고(close) 새로 여는 가비지 컬렉션(GC) 유사 로직을 스케줄러에 넣어줘."
+
+42. 헤드리스 모드 전환
+
+프롬프트: "개발 중엔 브라우저가 보이지만(headless: false), 배포 시엔 안 보이게(headless: true) 설정할 수 있는 환경 변수 옵션을 main.ts에 추가해줘."
+
+43. API 비용 최적화
+
+프롬프트: "채팅 로그가 너무 길면 토큰 비용이 많이 나와. LLM에 보낼 때, '안녕하세요' 같은 무의미한 인사말이나 3일 지난 옛날 대화는 잘라내는 전처리(Preprocessing) 함수를 더 정교하게 다듬어줘."
+
+Phase 10. [Final Integration] 통합 및 테스트 (The Final Exam)
+조각난 코드들을 하나로 합치고 검증하는 단계야.
+
+44. 모듈 의존성 주입 (Wiring)
+
+프롬프트: "ScraperService, LlmService, ErpService 인스턴스를 MainController 클래스 하나에서 관리하도록 구조를 잡아줘. React에서 오는 IPC 요청을 이 컨트롤러가 받아서 순서대로 하위 서비스를 호출하게 해."
+
+45. Mock 데이터 테스트 (시뮬레이션)
+
+프롬프트: "카톡이나 ERP가 닫힌 시간에도 개발할 수 있게, 가짜 카톡 메시지 객체와 가짜 ERP 검색 결과를 리턴하는 MockMode를 만들어줘. 이걸로 UI가 잘 그려지는지 테스트하고 싶어."
+
+46. 엣지 케이스 테스트 시나리오
+
+프롬프트: "테스트 시나리오 코드를 짜줘.
+
+고객 이름이 '이' (외자)일 때.
+
+날짜를 '다음주 다담주 월요일' 같이 이상하게 말할 때.
+
+ERP 검색 결과가 50명일 때. 이 상황에서도 앱이 안 죽는지 확인하는 자동 테스트 스크립트를 작성해줘."
+
+47. 빌드 설정 (Electron Builder)
+
+프롬프트: "package.json에 electron-builder 설정을 추가해. 윈도우용 아이콘(.ico)을 지정하고, 불필요한 소스 파일(src/)은 제외하고 빌드해서 .exe 설치 파일을 만드는 명령어를 정리해줘."
+
+48. 자동 업데이트 (Auto Updater)
+
+프롬프트: "electron-updater를 설정해서, 내가 깃허브(GitHub) 릴리즈에 새 버전을 올리면 프로그램 켰을 때 자동으로 업데이트를 감지하고 다운로드하는 코드를 main.ts에 추가해줘."
+
+Phase 11. [Secret Sauce] 매니저의 비기 (The Edge)
+마지막으로, 단순 개발을 넘어 **'장사 잘하는 매니저'**의 노하우를 코드에 녹이는 거야.
+
+49. 세일즈 멘트 강화 (Prompt Engineering)
+
+프롬프트: "시스템 프롬프트에 '영업 전략'을 추가해. 고객이 1종을 문의하면 '1종이 어렵다면 2종으로 변경도 가능하니 편하게 오세요' 같은 멘트를 상황에 맞춰 추가하도록 지시해줘."
+
+50. 미입금 리마인더
+
+프롬프트: "예약은 잡혔는데 결제 상태가 '미입금'인 건이 로컬 DB에 있으면, 1시간 뒤에 '입금 확인이 안 되었습니다'라는 카톡을 보낼지 물어보는 알림을 띄워줘."
+
+51. 다중 채팅방 병렬 처리
+
+프롬프트: "지금은 한 번에 하나씩 처리하는데, Promise.all을 사용해서 채팅방 3개를 동시에 열고(탭 3개) 병렬로 스크래핑해서 속도를 3배 높이는 구조로 리팩토링해줘."
+
+52. 긴급 정지 버튼 (Kill Switch)
+
+프롬프트: "프로그램이 폭주할 경우를 대비해, 키보드 F12나 특정 단축키를 누르면 모든 Playwright 작업을 즉시 강제 종료하고(Abort), '안전 모드'로 전환되는 글로벌 훅을 걸어줘."
+
+Phase 12. [End Game] 최종 점검
+53. 코드 난독화 (Security)
+
+프롬프트: "빌드할 때 소스 코드를 읽기 어렵게 난독화(Obfuscation)하는 플러그인을 Vite 설정에 추가해줘. 로직 유출을 막자."
+
+54. 환경 변수 분리
+
+프롬프트: "아이디, 비밀번호, API 키는 절대로 코드에 박지 마. 앱 최초 실행 시 사용자에게 입력받아 electron-store의 암호화된 저장소에 넣는 SetupWizard UI를 만들어줘."
+
+55. 최종 리팩토링
+
+프롬프트: "지금까지 만든 파일들이 너무 커졌어. services/ 폴더를 scraper, llm, erp, utils로 더 잘게 쪼개고, 중복 코드를 제거하는 리팩토링 가이드를 줘."
+
+56. 사용 설명서 생성
+
+프롬프트: "이 프로그램의 사용법(설치, 로그인, 자동화 승인 방법)을 담은 README.md 파일을 작성해줘. 비개발자 직원도 보고 쓸 수 있게 아주 쉽게 써줘."
+
+57. 의존성 버전 고정
+
+프롬프트: "지금 잘 돌아가는 package.json의 라이브러리 버전들 앞에 ^를 떼고 버전을 고정(Pin)해줘. 나중에 업데이트하다가 깨지는 걸 막자."
+
+58. 로그 분석기
+
+프롬프트: "쌓인 로그 파일을 읽어서 '오늘 처리 건수', 'AI 성공률', '가장 많이 예약된 시간' 통계를 보여주는 간단한 팝업을 메뉴에 추가해줘."
+
+59. 아이콘 및 브랜딩
+
+프롬프트: "이 앱의 이름은 'Gosoo-Bot'이야. 윈도우 타이틀바 색상을 우리 브랜드 컬러(노란색)로 바꾸고, 앱 아이콘을 적용하는 CSS/Electron 설정을 해줘."
+
+60. 배포 파일 생성
+
+프롬프트: "자, 모든 준비 끝. npm run build 명령어를 실행하면 최종 .exe 파일이 튀어나오도록 스크립트를 점검해줘."

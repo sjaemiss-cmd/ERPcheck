@@ -3739,7 +3739,7 @@ var commonjsGlobal = typeof globalThis !== "undefined" ? globalThis : typeof win
 function getDefaultExportFromCjs(x) {
   return x && x.__esModule && Object.prototype.hasOwnProperty.call(x, "default") ? x["default"] : x;
 }
-var boolbase = {
+var boolbase$1 = {
   trueFunc: function trueFunc() {
     return true;
   },
@@ -3747,7 +3747,7 @@ var boolbase = {
     return false;
   }
 };
-const boolbase$1 = /* @__PURE__ */ getDefaultExportFromCjs(boolbase);
+const boolbase = /* @__PURE__ */ getDefaultExportFromCjs(boolbase$1);
 const procedure = /* @__PURE__ */ new Map([
   [SelectorType.Universal, 50],
   [SelectorType.Tag, 30],
@@ -3897,7 +3897,7 @@ const attributeRules = {
     const { adapter: adapter2 } = options;
     const { name, value } = data2;
     if (/\s/.test(value)) {
-      return boolbase$1.falseFunc;
+      return boolbase.falseFunc;
     }
     const regex = new RegExp(`(?:^|\\s)${escapeRegex(value)}(?:$|\\s)`, shouldIgnoreCase(data2, options) ? "i" : "");
     return function element(elem) {
@@ -3914,7 +3914,7 @@ const attributeRules = {
     let { value } = data2;
     const len = value.length;
     if (len === 0) {
-      return boolbase$1.falseFunc;
+      return boolbase.falseFunc;
     }
     if (shouldIgnoreCase(data2, options)) {
       value = value.toLowerCase();
@@ -3934,7 +3934,7 @@ const attributeRules = {
     let { value } = data2;
     const len = -value.length;
     if (len === 0) {
-      return boolbase$1.falseFunc;
+      return boolbase.falseFunc;
     }
     if (shouldIgnoreCase(data2, options)) {
       value = value.toLowerCase();
@@ -3952,7 +3952,7 @@ const attributeRules = {
     const { adapter: adapter2 } = options;
     const { name, value } = data2;
     if (value === "") {
-      return boolbase$1.falseFunc;
+      return boolbase.falseFunc;
     }
     if (shouldIgnoreCase(data2, options)) {
       const regex = new RegExp(escapeRegex(value), "i");
@@ -4041,13 +4041,13 @@ function compile$2(parsed) {
   const a = parsed[0];
   const b = parsed[1] - 1;
   if (b < 0 && a <= 0)
-    return boolbase$1.falseFunc;
+    return boolbase.falseFunc;
   if (a === -1)
     return (index2) => index2 <= b;
   if (a === 0)
     return (index2) => index2 === b;
   if (a === 1)
-    return b < 0 ? boolbase$1.trueFunc : (index2) => index2 >= b;
+    return b < 0 ? boolbase.trueFunc : (index2) => index2 >= b;
   const absA = Math.abs(a);
   const bMod = (b % absA + absA) % absA;
   return a > 1 ? (index2) => index2 >= b && index2 % absA === bMod : (index2) => index2 <= b && index2 % absA === bMod;
@@ -4076,9 +4076,9 @@ const filters = {
   // Location specific methods
   "nth-child"(next2, rule, { adapter: adapter2, equals }) {
     const func = nthCheck(rule);
-    if (func === boolbase$1.falseFunc)
-      return boolbase$1.falseFunc;
-    if (func === boolbase$1.trueFunc)
+    if (func === boolbase.falseFunc)
+      return boolbase.falseFunc;
+    if (func === boolbase.trueFunc)
       return getChildFunc(next2, adapter2);
     return function nthChild(elem) {
       const siblings2 = adapter2.getSiblings(elem);
@@ -4095,9 +4095,9 @@ const filters = {
   },
   "nth-last-child"(next2, rule, { adapter: adapter2, equals }) {
     const func = nthCheck(rule);
-    if (func === boolbase$1.falseFunc)
-      return boolbase$1.falseFunc;
-    if (func === boolbase$1.trueFunc)
+    if (func === boolbase.falseFunc)
+      return boolbase.falseFunc;
+    if (func === boolbase.trueFunc)
       return getChildFunc(next2, adapter2);
     return function nthLastChild(elem) {
       const siblings2 = adapter2.getSiblings(elem);
@@ -4114,9 +4114,9 @@ const filters = {
   },
   "nth-of-type"(next2, rule, { adapter: adapter2, equals }) {
     const func = nthCheck(rule);
-    if (func === boolbase$1.falseFunc)
-      return boolbase$1.falseFunc;
-    if (func === boolbase$1.trueFunc)
+    if (func === boolbase.falseFunc)
+      return boolbase.falseFunc;
+    if (func === boolbase.trueFunc)
       return getChildFunc(next2, adapter2);
     return function nthOfType(elem) {
       const siblings2 = adapter2.getSiblings(elem);
@@ -4134,9 +4134,9 @@ const filters = {
   },
   "nth-last-of-type"(next2, rule, { adapter: adapter2, equals }) {
     const func = nthCheck(rule);
-    if (func === boolbase$1.falseFunc)
-      return boolbase$1.falseFunc;
-    if (func === boolbase$1.trueFunc)
+    if (func === boolbase.falseFunc)
+      return boolbase.falseFunc;
+    if (func === boolbase.trueFunc)
       return getChildFunc(next2, adapter2);
     return function nthLastOfType(elem) {
       const siblings2 = adapter2.getSiblings(elem);
@@ -4177,7 +4177,7 @@ function dynamicStatePseudo(name) {
   return function dynamicPseudo(next2, _rule, { adapter: adapter2 }) {
     const func = adapter2[name];
     if (typeof func !== "function") {
-      return boolbase$1.falseFunc;
+      return boolbase.falseFunc;
     }
     return function active(elem) {
       return func(elem) && next2(elem);
@@ -4284,8 +4284,8 @@ const aliases = {
 };
 const PLACEHOLDER_ELEMENT = {};
 function ensureIsTag(next2, adapter2) {
-  if (next2 === boolbase$1.falseFunc)
-    return boolbase$1.falseFunc;
+  if (next2 === boolbase.falseFunc)
+    return boolbase.falseFunc;
   return (elem) => adapter2.isTag(elem) && next2(elem);
 }
 function getNextSiblings(elem, adapter2) {
@@ -4311,7 +4311,7 @@ function copyOptions(options) {
 }
 const is$2 = (next2, token, options, context, compileToken2) => {
   const func = compileToken2(token, copyOptions(options), context);
-  return func === boolbase$1.trueFunc ? next2 : func === boolbase$1.falseFunc ? boolbase$1.falseFunc : (elem) => func(elem) && next2(elem);
+  return func === boolbase.trueFunc ? next2 : func === boolbase.falseFunc ? boolbase.falseFunc : (elem) => func(elem) && next2(elem);
 };
 const subselects = {
   is: is$2,
@@ -4322,7 +4322,7 @@ const subselects = {
   where: is$2,
   not(next2, token, options, context, compileToken2) {
     const func = compileToken2(token, copyOptions(options), context);
-    return func === boolbase$1.falseFunc ? next2 : func === boolbase$1.trueFunc ? boolbase$1.falseFunc : (elem) => !func(elem) && next2(elem);
+    return func === boolbase.falseFunc ? next2 : func === boolbase.trueFunc ? boolbase.falseFunc : (elem) => !func(elem) && next2(elem);
   },
   has(next2, subselect, options, _context, compileToken2) {
     const { adapter: adapter2 } = options;
@@ -4333,10 +4333,10 @@ const subselects = {
       [PLACEHOLDER_ELEMENT]
     ) : void 0;
     const compiled = compileToken2(subselect, opts, context);
-    if (compiled === boolbase$1.falseFunc)
-      return boolbase$1.falseFunc;
+    if (compiled === boolbase.falseFunc)
+      return boolbase.falseFunc;
     const hasElement = ensureIsTag(compiled, adapter2);
-    if (context && compiled !== boolbase$1.trueFunc) {
+    if (context && compiled !== boolbase.trueFunc) {
       const { shouldTestNextSiblings = false } = compiled;
       return (elem) => {
         if (!next2(elem))
@@ -4562,19 +4562,19 @@ function compileToken(token, options, context) {
       }
     }
     return compileRules(rules2, options, finalContext);
-  }).reduce(reduceRules, boolbase$1.falseFunc);
+  }).reduce(reduceRules, boolbase.falseFunc);
   query.shouldTestNextSiblings = shouldTestNextSiblings;
   return query;
 }
 function compileRules(rules2, options, context) {
   var _a2;
-  return rules2.reduce((previous, rule) => previous === boolbase$1.falseFunc ? boolbase$1.falseFunc : compileGeneralSelector(previous, rule, options, context, compileToken), (_a2 = options.rootFunc) !== null && _a2 !== void 0 ? _a2 : boolbase$1.trueFunc);
+  return rules2.reduce((previous, rule) => previous === boolbase.falseFunc ? boolbase.falseFunc : compileGeneralSelector(previous, rule, options, context, compileToken), (_a2 = options.rootFunc) !== null && _a2 !== void 0 ? _a2 : boolbase.trueFunc);
 }
 function reduceRules(a, b) {
-  if (b === boolbase$1.falseFunc || a === boolbase$1.trueFunc) {
+  if (b === boolbase.falseFunc || a === boolbase.trueFunc) {
     return a;
   }
-  if (a === boolbase$1.falseFunc || b === boolbase$1.trueFunc) {
+  if (a === boolbase.falseFunc || b === boolbase.trueFunc) {
     return b;
   }
   return function combine(elem) {
@@ -4814,8 +4814,8 @@ function findFilterElements(root2, selector, options, queryForSelector, totalLim
        */
       rootFunc: (el) => result.includes(el)
     };
-  } else if (options.rootFunc && options.rootFunc !== boolbase.trueFunc) {
-    options = { ...options, rootFunc: boolbase.trueFunc };
+  } else if (options.rootFunc && options.rootFunc !== boolbase$1.trueFunc) {
+    options = { ...options, rootFunc: boolbase$1.trueFunc };
   }
   return remainingSelector.some(isFilter) ? findFilterElements(result, remainingSelector, options, false, totalLimit) : remainingHasTraversal ? (
     // Query existing elements to resolve traversal.
@@ -4838,7 +4838,7 @@ function filterElements(elements, sel, options) {
   if (els.length === 0)
     return els;
   const query = _compileToken(sel, options);
-  return query === boolbase.trueFunc ? els : els.filter(query);
+  return query === boolbase$1.trueFunc ? els : els.filter(query);
 }
 const reSiblingSelector = /^\s*[+~]/;
 function find(selectorOrHaystack) {
@@ -25394,8 +25394,9 @@ class ErpService {
       endTime = `${String(endDate.getHours()).padStart(2, "0")}:${String(endDate.getMinutes()).padStart(2, "0")}`;
       console.log(`[ErpService] -> Matched Consultation! Set 30min duration: ${startTime} ~ ${endTime}`);
     }
+    const displayName = goodsIdx === "NONE" ? `${naverBooking.user_name}/상담` : naverBooking.user_name;
     const payload = {
-      name: naverBooking.user_name,
+      name: displayName,
       phone: naverBooking.user_phone,
       date,
       start_time: startTime,
@@ -25490,26 +25491,34 @@ class ErpService {
         try {
           await page.click(`${modalSelector} input.type_member_a`);
           await page.waitForTimeout(200);
-          const memberValue = await page.evaluate((targetName) => {
-            const options = $(`#CalenderModalNew #member_select option`);
-            let foundVal = null;
-            options.each(function() {
-              if ($(this).text().includes(targetName)) {
-                foundVal = $(this).val();
-                return false;
-              }
-            });
-            return foundVal;
-          }, data2.name);
-          if (memberValue) {
-            console.log(`[ErpService] Found existing member: ${data2.name} -> ${memberValue}`);
-            await page.selectOption(`${modalSelector} #member_select`, memberValue);
+          let found = false;
+          if (data2.customerId) {
+            console.log(`[ErpService] Selecting member by ID: ${data2.customerId}`);
+            await page.selectOption(`${modalSelector} #member_select`, data2.customerId);
+            found = true;
           } else {
-            console.warn(`[ErpService] Existing member not found for ${data2.name}. Falling back to New Member.`);
-            isExistingMember = false;
+            const memberValue = await page.evaluate((targetName) => {
+              const options = $(`#CalenderModalNew #member_select option`);
+              let foundVal = null;
+              options.each(function() {
+                if ($(this).text().includes(targetName)) {
+                  foundVal = $(this).val();
+                  return false;
+                }
+              });
+              return foundVal;
+            }, data2.name);
+            if (memberValue) {
+              console.log(`[ErpService] Found existing member: ${data2.name} -> ${memberValue}`);
+              await page.selectOption(`${modalSelector} #member_select`, memberValue);
+              found = true;
+            } else {
+              console.warn(`[ErpService] Member ${data2.name} not found in dropdown. Falling back to New Member input.`);
+              isExistingMember = false;
+            }
           }
         } catch (e) {
-          console.error("[ErpService] Error in existing member selection:", e);
+          console.error("[ErpService] Member selection failed, falling back to New Member:", e);
           isExistingMember = false;
         }
       }
@@ -25654,6 +25663,27 @@ class ErpService {
       return false;
     }
   }
+  async registerReservation(data2) {
+    console.log(`[ErpService] registerReservation called for ${data2.name} on ${data2.date}`);
+    const startTime = data2.time;
+    const [h, m] = startTime.split(":").map(Number);
+    const endH = h + data2.duration;
+    const endTime = `${String(endH).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+    const createData = {
+      name: data2.name,
+      memberType: "existing",
+      date: data2.date,
+      start_time: startTime,
+      end_time: endTime,
+      seat_id: "",
+      // Let fallback handle it
+      product: data2.type,
+      goods_idx: "",
+      customerId: data2.customerId,
+      dryRun: false
+    };
+    return await this.createReservation(createData);
+  }
   async getSchedule(startDate, endDate) {
     console.log(`[ErpService] getSchedule called from ${startDate} to ${endDate}`);
     if (!this.browser) await this.start();
@@ -25699,6 +25729,87 @@ class ErpService {
       console.error("[ErpService] getSchedule error:", e);
       return [];
     }
+  }
+  async searchCustomer(name) {
+    console.log(`[ErpService] searchCustomer called with name: ${name}`);
+    if (!this.page) await this.start();
+    if (!this.page) return [];
+    const page = this.page;
+    try {
+      if (!page.url().includes("/index/member")) {
+        await page.goto("http://sook0517.cafe24.com/index/member/list", { waitUntil: "domcontentloaded" });
+      }
+      await page.fill("#search_text", name);
+      await page.click("#search_btn");
+      await page.waitForNavigation({ waitUntil: "domcontentloaded" });
+      const customers = [];
+      const rows = page.locator("table.jambo_table tbody tr");
+      const count = await rows.count();
+      for (let i = 0; i < count; i++) {
+        const row = rows.nth(i);
+        const id2 = await row.locator('input[name="member_idx"]').getAttribute("value");
+        const nameText = await row.locator("td:nth-child(2) > a").first().textContent();
+        const phone = await row.locator("td.phone_td").textContent();
+        const goods = await row.locator("td:nth-child(5)").textContent();
+        const remainingTime = await row.locator("td:nth-child(6)").textContent();
+        const testDate = await row.locator("td:nth-child(7)").textContent();
+        const finalPass = await row.locator("td:nth-child(8)").textContent();
+        const branch = await row.locator("td:nth-child(9)").textContent();
+        const joinDate = await row.locator("td:nth-child(11)").textContent();
+        if (id2 && nameText) {
+          customers.push({
+            id: id2,
+            name: nameText.trim(),
+            phone: (phone == null ? void 0 : phone.trim()) || "",
+            goods: goods == null ? void 0 : goods.trim(),
+            remainingTime: remainingTime == null ? void 0 : remainingTime.trim(),
+            testDate: testDate == null ? void 0 : testDate.trim(),
+            finalPass: finalPass == null ? void 0 : finalPass.trim(),
+            branch: branch == null ? void 0 : branch.trim(),
+            joinDate: joinDate == null ? void 0 : joinDate.trim()
+          });
+        }
+      }
+      console.log(`[ErpService] Found ${customers.length} customers for name: ${name}`);
+      return customers;
+    } catch (e) {
+      console.error("[ErpService] Error in searchCustomer:", e);
+      return [];
+    }
+  }
+  async getCustomerDetail(id2) {
+    console.log(`[ErpService] getCustomerDetail called for ID ${id2}`);
+    if (!this.page) return { memo: "", history: [] };
+    const page = this.page;
+    if (!page.url().includes("/index/member")) {
+      console.warn("[ErpService] Not on member list page, cannot open modal directly.");
+      return { memo: "", history: [] };
+    }
+    const row = page.locator(`tr:has(input[value="${id2}"])`);
+    if (await row.count() === 0) {
+      console.error(`[ErpService] Customer row not found for ID ${id2}`);
+      return { memo: "", history: [] };
+    }
+    await row.locator("td:nth-child(2) > a").first().click();
+    const modalSelector = `#modifyModal_${id2}`;
+    try {
+      await page.waitForSelector(modalSelector, { state: "visible", timeout: 5e3 });
+    } catch (e) {
+      console.error(`[ErpService] Modal ${modalSelector} timeout`);
+      return { memo: "", history: [] };
+    }
+    const memo = await page.locator(`${modalSelector} textarea[name="memo"]`).inputValue();
+    const historyHtml = await page.locator(`${modalSelector} .booking_history`).innerHTML();
+    const history = historyHtml.split("<br>").map((s) => s.trim()).filter((s) => s.length > 0);
+    await page.locator(`${modalSelector} button.close`).click();
+    await page.waitForSelector(modalSelector, { state: "hidden" });
+    return { memo, history };
+  }
+  async checkDuplicate(customer, date) {
+    const detail = await this.getCustomerDetail(customer.id);
+    const hasDuplicate = detail.history.some((line) => line.startsWith(date));
+    console.log(`[ErpService] checkDuplicate for ${customer.name} on ${date}: ${hasDuplicate}`);
+    return hasDuplicate;
   }
 }
 class ScraperService {
@@ -25811,19 +25922,29 @@ class ScraperService {
         return [];
       }
       try {
-        await page.waitForSelector("div[class*='BookingListView__list-contents']", { timeout: 1e4 });
+        await page.waitForSelector("a[class*='BookingListView__contents-user']", { timeout: 1e4 });
+        await page.waitForTimeout(1e3);
       } catch (e) {
-        console.error("[ScraperService] List container not found");
+        console.warn("[ScraperService] No booking links found within timeout. Page might be empty or loading slow.");
+        const noData = await page.isVisible("div[class*='BookingListView__no-data']").catch(() => false);
+        if (noData) {
+          console.log("[ScraperService] Confirmed: No bookings available.");
+        }
         return [];
       }
       const results = [];
-      const rowsLocator = page.locator("div[class*='BookingListView__list-contents']");
+      const rowsLocator = page.locator("a[class*='BookingListView__contents-user']");
       const rowCount = await rowsLocator.count();
       console.log(`[ScraperService] Found ${rowCount} bookings in list`);
       for (let i = 0; i < rowCount; i++) {
         try {
           const row = rowsLocator.nth(i);
-          await row.locator("a[class*='BookingListView__contents-user']").click();
+          const rowText = await row.innerText().catch(() => "");
+          if (rowText.includes("이용완료") || rowText.includes("취소")) {
+            console.log(`[ScraperService] Skipping row ${i}: ${rowText.split("\n")[0]}...`);
+            continue;
+          }
+          await row.click();
           await page.waitForSelector("div[class*='Detail__body-container']", { timeout: 5e3 });
           const detail = await page.evaluate(() => {
             const getText2 = (root2, selector) => {

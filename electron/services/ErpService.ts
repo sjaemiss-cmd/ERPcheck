@@ -1,8 +1,9 @@
-import { chromium, Browser, Page } from 'playwright'
+import { chromium } from 'playwright'
+import type { Browser, Page } from 'playwright'
 import * as cheerio from 'cheerio'
 import iconv from 'iconv-lite';
 import { ipcMain } from 'electron'
-import { DailyData, Student } from './types'
+import type { DailyData, Student, Customer, ReservationData } from './types.ts'
 
 export class ErpService {
     private browser: Browser | null = null
@@ -941,8 +942,10 @@ export class ErpService {
         }
 
         // 4. Construct Payload
+        const displayName = goodsIdx === "NONE" ? `${naverBooking.user_name}/상담` : naverBooking.user_name;
+
         const payload = {
-            name: naverBooking.user_name,
+            name: displayName,
             phone: naverBooking.user_phone,
             date: date,
             start_time: startTime,
@@ -1067,35 +1070,42 @@ export class ErpService {
                     await page.click(`${modalSelector} input.type_member_a`);
                     await page.waitForTimeout(200);
 
-                    const memberValue = await page.evaluate((targetName) => {
-                        // @ts-ignore
-                        const options = $(`#CalenderModalNew #member_select option`);
-                        let foundVal = null;
-                        // @ts-ignore
-                        options.each(function () {
-                            // @ts-ignore
-                            if ($(this).text().includes(targetName)) {
-                                // @ts-ignore
-                                foundVal = $(this).val();
-                                return false;
-                            }
-                        });
-                        return foundVal;
-                    }, data.name);
-
-                    if (memberValue) {
-                        console.log(`[ErpService] Found existing member: ${data.name} -> ${memberValue}`);
-                        await page.selectOption(`${modalSelector} #member_select`, memberValue as string);
+                    let found = false;
+                    if (data.customerId) {
+                        console.log(`[ErpService] Selecting member by ID: ${data.customerId}`);
+                        await page.selectOption(`${modalSelector} #member_select`, data.customerId);
+                        found = true;
                     } else {
-                        console.warn(`[ErpService] Existing member not found for ${data.name}. Falling back to New Member.`);
-                        isExistingMember = false;
+                        const memberValue = await page.evaluate((targetName) => {
+                            // @ts-ignore
+                            const options = $(`#CalenderModalNew #member_select option`);
+                            let foundVal = null;
+                            // @ts-ignore
+                            options.each(function () {
+                                // @ts-ignore
+                                if ($(this).text().includes(targetName)) {
+                                    // @ts-ignore
+                                    foundVal = $(this).val();
+                                    return false;
+                                }
+                            });
+                            return foundVal;
+                        }, data.name);
+
+                        if (memberValue) {
+                            console.log(`[ErpService] Found existing member: ${data.name} -> ${memberValue}`);
+                            await page.selectOption(`${modalSelector} #member_select`, memberValue);
+                            found = true;
+                        } else {
+                            console.warn(`[ErpService] Member ${data.name} not found in dropdown. Falling back to New Member input.`);
+                            isExistingMember = false; // Trigger fallback
+                        }
                     }
                 } catch (e) {
-                    console.error('[ErpService] Error in existing member selection:', e);
+                    console.error('[ErpService] Member selection failed, falling back to New Member:', e);
                     isExistingMember = false;
                 }
             }
-
             // 6. New Member Input
             if (!isExistingMember) {
                 await page.click(`${modalSelector} input.type_member_b`);
@@ -1270,6 +1280,30 @@ export class ErpService {
             return false;
         }
     }
+    async registerReservation(data: ReservationData): Promise<boolean> {
+        console.log(`[ErpService] registerReservation called for ${data.name} on ${data.date}`)
+
+        const startTime = data.time
+        const [h, m] = startTime.split(':').map(Number)
+        const endH = h + data.duration
+        const endTime = `${String(endH).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+
+        const createData = {
+            name: data.name,
+            memberType: 'existing',
+            date: data.date,
+            start_time: startTime,
+            end_time: endTime,
+            seat_id: '', // Let fallback handle it
+            product: data.type,
+            goods_idx: '',
+            customerId: data.customerId,
+            dryRun: false
+        }
+
+        return await this.createReservation(createData)
+    }
+
     async getSchedule(startDate: string, endDate: string): Promise<any[]> {
         console.log(`[ErpService] getSchedule called from ${startDate} to ${endDate}`)
         if (!this.browser) await this.start()
@@ -1342,4 +1376,123 @@ export class ErpService {
             return []
         }
     }
+
+    async searchCustomer(name: string): Promise<Customer[]> {
+        console.log(`[ErpService] searchCustomer called with name: ${name}`)
+        if (!this.page) await this.start()
+        if (!this.page) return []
+
+        const page = this.page
+
+        try {
+            // Ensure we are on the member list page
+            if (!page.url().includes('/index/member')) {
+                await page.goto('http://sook0517.cafe24.com/index/member/list', { waitUntil: 'domcontentloaded' })
+            }
+
+            // Fill search input
+            await page.fill('#search_text', name)
+            await page.click('#search_btn')
+
+            // Wait for navigation or table update
+            await page.waitForNavigation({ waitUntil: 'domcontentloaded' })
+
+            // Parse results
+            const customers: Customer[] = []
+            const rows = page.locator('table.jambo_table tbody tr')
+            const count = await rows.count()
+
+            for (let i = 0; i < count; i++) {
+                const row = rows.nth(i)
+                const id = await row.locator('input[name="member_idx"]').getAttribute('value')
+                // Name is in the second column, inside an <a> tag
+                const nameText = await row.locator('td:nth-child(2) > a').first().textContent()
+                const phone = await row.locator('td.phone_td').textContent()
+                const goods = await row.locator('td:nth-child(5)').textContent()
+                const remainingTime = await row.locator('td:nth-child(6)').textContent()
+                const testDate = await row.locator('td:nth-child(7)').textContent()
+                const finalPass = await row.locator('td:nth-child(8)').textContent()
+                const branch = await row.locator('td:nth-child(9)').textContent()
+                const joinDate = await row.locator('td:nth-child(11)').textContent()
+
+                if (id && nameText) {
+                    customers.push({
+                        id,
+                        name: nameText.trim(),
+                        phone: phone?.trim() || '',
+                        goods: goods?.trim(),
+                        remainingTime: remainingTime?.trim(),
+                        testDate: testDate?.trim(),
+                        finalPass: finalPass?.trim(),
+                        branch: branch?.trim(),
+                        joinDate: joinDate?.trim()
+                    })
+                }
+            }
+
+            console.log(`[ErpService] Found ${customers.length} customers for name: ${name}`)
+            return customers
+
+        } catch (e) {
+            console.error('[ErpService] Error in searchCustomer:', e)
+            return []
+        }
+    }
+
+    async getCustomerDetail(id: string): Promise<{ memo: string, history: string[] }> {
+        console.log(`[ErpService] getCustomerDetail called for ID ${id}`)
+        if (!this.page) return { memo: '', history: [] }
+        const page = this.page
+
+        // Check if we are on member list
+        if (!page.url().includes('/index/member')) {
+            console.warn('[ErpService] Not on member list page, cannot open modal directly.')
+            return { memo: '', history: [] }
+        }
+
+        // Find row
+        const row = page.locator(`tr:has(input[value="${id}"])`)
+        if (await row.count() === 0) {
+            console.error(`[ErpService] Customer row not found for ID ${id}`)
+            return { memo: '', history: [] }
+        }
+
+        // Click name
+        await row.locator('td:nth-child(2) > a').first().click()
+
+        // Wait for modal
+        const modalSelector = `#modifyModal_${id}`
+        try {
+            await page.waitForSelector(modalSelector, { state: 'visible', timeout: 5000 })
+        } catch (e) {
+            console.error(`[ErpService] Modal ${modalSelector} timeout`)
+            return { memo: '', history: [] }
+        }
+
+        // Get Memo
+        const memo = await page.locator(`${modalSelector} textarea[name="memo"]`).inputValue()
+
+        // Get History
+        const historyHtml = await page.locator(`${modalSelector} .booking_history`).innerHTML()
+        const history = historyHtml.split('<br>').map(s => s.trim()).filter(s => s.length > 0)
+
+        // Close
+        await page.locator(`${modalSelector} button.close`).click()
+        await page.waitForSelector(modalSelector, { state: 'hidden' })
+
+        return { memo, history }
+    }
+
+    async checkDuplicate(customer: Customer, date: string): Promise<boolean> {
+        // Returns true if duplicate found
+        const detail = await this.getCustomerDetail(customer.id)
+        // Check history for date
+        // History format: "2025-12-18/13:00~14:00(목) 예약 하셨습니다."
+        // We check if any line starts with the date
+        const hasDuplicate = detail.history.some(line => line.startsWith(date))
+        console.log(`[ErpService] checkDuplicate for ${customer.name} on ${date}: ${hasDuplicate}`)
+        return hasDuplicate
+    }
+
 }
+

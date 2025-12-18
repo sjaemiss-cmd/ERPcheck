@@ -12,6 +12,7 @@
     "dependencies": {
         "@fullcalendar/daygrid": "^6.1.0",
         "@fullcalendar/react": "^6.1.0",
+        "@google/generative-ai": "^0.24.1",
         "@tanstack/react-query": "^5.0.0",
         "@tanstack/react-table": "^8.10.0",
         "@types/cheerio": "^0.22.35",
@@ -19,6 +20,7 @@
         "class-variance-authority": "^0.7.0",
         "clsx": "^2.0.0",
         "date-fns": "^2.30.0",
+        "dotenv": "^17.2.3",
         "electron-store": "^8.1.0",
         "iconv-lite": "^0.7.1",
         "lucide-react": "^0.292.0",

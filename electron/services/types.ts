@@ -31,4 +31,23 @@ export interface DailyData {
     students: Student[]
 }
 
+export interface Customer {
+    id: string
+    name: string
+    phone: string
+    goods?: string
+    remainingTime?: string
+    testDate?: string
+    finalPass?: string
+    branch?: string
+    joinDate?: string
+}
 
+export interface ReservationData {
+    customerId: string
+    name: string
+    date: string // YYYY-MM-DD
+    time: string // HH:mm
+    duration: number // hours
+    type: string // 1종, 2종, etc.
+}

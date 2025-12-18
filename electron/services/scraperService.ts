@@ -139,18 +139,25 @@ export class ScraperService {
                 return []
             }
 
-            // Wait for list to load
+            // Wait for list to load - Wait for the actual rows/links, not just the container
             try {
-                await page.waitForSelector("div[class*='BookingListView__list-contents']", { timeout: 10000 })
+                await page.waitForSelector("a[class*='BookingListView__contents-user']", { timeout: 10000 })
+                // Small extra wait for all items to render
+                await page.waitForTimeout(1000)
             } catch (e) {
-                console.error('[ScraperService] List container not found')
+                console.warn('[ScraperService] No booking links found within timeout. Page might be empty or loading slow.')
+                // Check if there's a "no data" message
+                const noData = await page.isVisible("div[class*='BookingListView__no-data']").catch(() => false)
+                if (noData) {
+                    console.log('[ScraperService] Confirmed: No bookings available.')
+                }
                 return []
             }
 
             const results: any[] = []
 
-            // 2. Iterate Strategy: Count rows first
-            const rowsLocator = page.locator("div[class*='BookingListView__list-contents']")
+            // 2. Iterate Strategy: Count links directly
+            const rowsLocator = page.locator("a[class*='BookingListView__contents-user']")
             const rowCount = await rowsLocator.count()
             console.log(`[ScraperService] Found ${rowCount} bookings in list`)
 
@@ -158,10 +165,17 @@ export class ScraperService {
                 try {
                     // Re-query list item to avoid stale elements
                     const row = rowsLocator.nth(i)
+                    const rowText = await row.innerText().catch(() => '')
 
-                    // 3. Click Detail (Anchor tag)
-                    // Use a more specific selector ensuring we click the link part
-                    await row.locator("a[class*='BookingListView__contents-user']").click()
+                    // Skip only if it's explicitly 'Usage Completed' or 'Cancelled'
+                    // Avoid skipping 'Payment Completed' (결제완료) which is an active booking
+                    if (rowText.includes('이용완료') || rowText.includes('취소')) {
+                        console.log(`[ScraperService] Skipping row ${i}: ${rowText.split('\n')[0]}...`)
+                        continue
+                    }
+
+                    // 3. Click Detail
+                    await row.click()
 
                     // 4. Wait for Detail View
                     await page.waitForSelector("div[class*='Detail__body-container']", { timeout: 5000 })
