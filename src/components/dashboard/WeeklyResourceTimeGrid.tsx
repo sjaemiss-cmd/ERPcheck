@@ -84,10 +84,141 @@ export function WeeklyResourceTimeGrid({ className, isActive = true }: WeeklyRes
         const timer = setInterval(() => setNow(new Date()), 60000) // Update every minute
         return () => clearInterval(timer)
     }, [isActive])
-
     const [events, setEvents] = useState<ResourceTimeGridEvent[]>([])
     const [loading, setLoading] = useState(false)
+    const [syncingEventId, setSyncingEventId] = useState<string | null>(null)
     const scrollContainerRef = useRef<HTMLDivElement>(null)
+
+    // Drag and drop state
+    const [draggedEvent, setDraggedEvent] = useState<ResourceTimeGridEvent | null>(null)
+    const [resizingEvent, setResizingEvent] = useState<ResourceTimeGridEvent | null>(null)
+    const [resizeStartY, setResizeStartY] = useState<number | null>(null)
+    const [resizeStartHeight, setResizeStartHeight] = useState<number | null>(null)
+
+    const handleDragStart = (event: ResourceTimeGridEvent, e: React.MouseEvent) => {
+        e.preventDefault()
+        console.log('[Drag] Started dragging event:', event)
+        setDraggedEvent(event)
+    }
+
+    const handleDragEnd = (e: React.MouseEvent, dateStr: string, resourceId: string) => {
+        e.preventDefault()
+        if (!draggedEvent) return
+
+        console.log('[Drop] Dropped event:', draggedEvent, 'to:', { dateStr, resourceId })
+
+        // Update event with new date and resourceId
+        const updatedEvent = {
+            ...draggedEvent,
+            date: dateStr,
+            resourceId,
+            start: new Date(`${dateStr}T${draggedEvent.start.toTimeString().slice(0, 5)}`),
+            end: new Date(`${dateStr}T${draggedEvent.end.toTimeString().slice(0, 5)}`)
+        }
+
+        setEvents(prevEvents =>
+            prevEvents.map(evt =>
+                evt.id === draggedEvent.id ? updatedEvent : evt
+            )
+        )
+
+        setDraggedEvent(null)
+
+        // Sync with ERP
+        syncEventToErp(updatedEvent)
+    }
+
+    const handleResizeStart = (event: ResourceTimeGridEvent, e: React.MouseEvent) => {
+        e.stopPropagation()
+        console.log('[Resize] Started resizing event:', event)
+        setResizingEvent(event)
+        setResizeStartY(e.clientY)
+        const eventElement = document.getElementById(`event-${event.id}`)
+        if (eventElement) {
+            setResizeStartHeight(eventElement.offsetHeight)
+        }
+    }
+
+    const handleResizeMove = (e: MouseEvent) => {
+        if (!resizingEvent || resizeStartY === null || resizeStartHeight === null) return
+
+        const deltaY = e.clientY - resizeStartY
+        const heightChange = deltaY / PIXELS_PER_MINUTE
+        const durationChangeMinutes = Math.round(heightChange / 15) * 15
+
+        if (Math.abs(durationChangeMinutes) >= 15) {
+            const newEnd = new Date(resizingEvent.end.getTime() + durationChangeMinutes * 60 * 1000)
+            console.log('[Resize] Updating end time:', newEnd)
+
+            setEvents(prevEvents =>
+                prevEvents.map(evt =>
+                    evt.id === resizingEvent.id ? { ...evt, end: newEnd } : evt
+                )
+            )
+        }
+    }
+
+    const handleResizeEnd = async (event: ResourceTimeGridEvent) => {
+        console.log('[Resize] Ended resizing event:', event)
+        setResizingEvent(null)
+        setResizeStartY(null)
+        setResizeStartHeight(null)
+
+        // Sync with ERP
+        syncEventToErp(event)
+    }
+
+    const syncEventToErp = async (event: ResourceTimeGridEvent) => {
+        console.log('[Sync] Syncing event to ERP:', event)
+        setSyncingEventId(event.id)
+        try {
+            const updates = {
+                startTime: formatTime(event.start),
+                endTime: formatTime(event.end),
+                machineValue: event.resourceId.startsWith('dobong-') ? event.resourceId.replace('dobong-', '') : undefined
+            }
+
+            await window.api.erp.updateReservation(event.id, event.date, updates)
+            alert('예약이 업데이트되었습니다.')
+        } catch (error) {
+            console.error('[Sync] Failed to sync event to ERP:', error)
+            alert('ERP 동기화에 실패했습니다.')
+            // Revert to original data
+            const originalEvent = events.find(evt => evt.id === event.id)
+            if (originalEvent) {
+                setEvents(prevEvents =>
+                    prevEvents.map(evt =>
+                        evt.id === event.id ? originalEvent : evt
+                    )
+                )
+            }
+        } finally {
+            setSyncingEventId(null)
+        }
+    }
+
+    const formatTime = (date: Date) => {
+        return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
+    }
+
+    useEffect(() => {
+        const handleMouseMove = (e: MouseEvent) => handleResizeMove(e)
+        const handleMouseUp = (e: MouseEvent) => {
+            if (resizingEvent) {
+                handleResizeEnd(resizingEvent)
+            }
+        }
+
+        if (resizingEvent) {
+            document.addEventListener('mousemove', handleMouseMove)
+            document.addEventListener('mouseup', handleMouseUp)
+        }
+
+        return () => {
+            document.removeEventListener('mousemove', handleMouseMove)
+            document.removeEventListener('mouseup', handleMouseUp)
+        }
+    }, [resizingEvent, resizeStartY, resizeStartHeight, events])
 
     // Derived state for the week
     const weekData = useMemo(() => getWeekRange(currentDate, 1), [currentDate])
@@ -557,19 +688,35 @@ export function WeeklyResourceTimeGrid({ className, isActive = true }: WeeklyRes
                                             const styles = getEventColorStyles(event.title, event.raw?.title, event.resourceId)
                                             const cleanTitle = stripHtml(event.title || event.raw?.title || '')
                                             const displayTitle = event.resourceId === 'operating' ? '운영' : cleanTitle
+                                            const isDragging = draggedEvent?.id === event.id
+                                            const isResizing = resizingEvent?.id === event.id
 
                                             return (
                                             <div
                                                 key={event.id}
-                                                className={`absolute border-l-4 text-xs p-1.5 overflow-hidden rounded-r-md cursor-pointer shadow-sm transition-all ${styles.bg}`}
+                                                id={`event-${event.id}`}
+                                                draggable
+                                                onDragStart={(e) => handleDragStart(event, e)}
+                                                onDragEnd={(e) => handleDragEnd(e, day, resId)}
+                                                className={`absolute border-l-4 text-xs p-1.5 overflow-hidden rounded-r-md shadow-sm transition-all ${styles.bg} ${isDragging ? 'opacity-50 cursor-grabbing' : 'cursor-grab'}`}
                                                 style={getEventStyle(event)}
-                                                        title={`${displayTitle} (${event.start.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})})`}
+                                                title={`${displayTitle} (${event.start.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})})`}
                                                 onClick={() => alert(`Event: ${cleanTitle}\nTime: ${event.start.toLocaleTimeString()} ~ ${event.end.toLocaleTimeString()}`)}
                                             >
                                                 <div className={`font-bold truncate ${styles.text}`}>{displayTitle}</div>
                                                 <div className={`truncate text-[10px] ${styles.time} font-medium`}>
                                                     {event.start.getHours()}:{String(event.start.getMinutes()).padStart(2, '0')}
                                                 </div>
+                                                {/* Resize Handle */}
+                                                <div
+                                                    className={`absolute bottom-0 left-0 right-0 h-2 cursor-ns-resize hover:bg-blue-200 ${isResizing ? 'bg-blue-400' : ''}`}
+                                                    onMouseDown={(e) => handleResizeStart(event, e)}
+                                                    onMouseUp={() => {
+                                                        if (isResizing) {
+                                                            handleResizeEnd(event)
+                                                        }
+                                                    }}
+                                                />
                                             </div>
                                         )})}
                                     </div>
