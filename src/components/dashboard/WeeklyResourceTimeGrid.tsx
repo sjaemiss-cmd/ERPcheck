@@ -824,19 +824,14 @@ export function WeeklyResourceTimeGrid({ className, isActive = true }: WeeklyRes
                                                     <div className="flex items-start text-xs text-gray-600 mt-2 bg-yellow-50 p-2 rounded border border-yellow-100">
                                                         <FileText className="w-3 h-3 mr-2 mt-0.5 flex-shrink-0 text-yellow-700" />
                                                         <span className="line-clamp-2">{item.memo}</span>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
-                                    )
-                                })
-                            )}
-                        </div>
-                    </div>
-                )}
+            </div>
+        </div>
+        </div>
             </div>
         </div>
     )
 }
+
+export default WeeklyResourceTimeGrid
 
 
