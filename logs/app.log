@@ -1,0 +1,8 @@
+[2026-01-14T06:23:16.096Z] [INFO] [Timer:start] erp:createReservation 최건 2026-01-14 13:00 
+[2026-01-14T06:24:03.019Z] [INFO] [Timer:end] erp:createReservation 최건 2026-01-14 13:00 (46920ms) 
+[2026-01-14T06:24:03.020Z] [INFO] [ErpService] createReservation total 46921ms {"name":"최건","date":"2026-01-14","start_time":"13:00","end_time":"14:00"}
+[2026-01-14T06:24:43.928Z] [INFO] [Timer:start] erp:createReservation 최건 2026-01-14 13:00 
+[2026-01-14T06:25:30.792Z] [INFO] [Timer:end] erp:createReservation 최건 2026-01-14 13:00 (46863ms) 
+[2026-01-14T06:25:30.801Z] [INFO] [ErpService] createReservation total 46872ms {"name":"최건","date":"2026-01-14","start_time":"13:00","end_time":"14:00"}
+[2026-01-16T06:46:54.790Z] [INFO] [Timer:start] erp:exportWeeklyReservations 2026-01-12~2026-01-18 
+[2026-01-16T06:47:28.228Z] [INFO] [Timer:end] erp:exportWeeklyReservations 2026-01-12~2026-01-18 (33435ms) {"count":126,"jsonFilePath":"C:\\Users\\jjheu\\AppData\\Roaming\\operation-master\\exports\\weekly_reservations_2026-01-12_2026-01-18_2026-01-16T06-47-28-213Z.json","csvFilePath":"C:\\Users\\jjheu\\AppData\\Roaming\\operation-master\\exports\\weekly_reservations_2026-01-12_2026-01-18_2026-01-16T06-47-28-213Z.csv"}

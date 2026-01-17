@@ -268,4 +268,8 @@ export class ScraperService {
             return []
         }
     }
+    async getKakaoBookings(): Promise<any[]> {
+        console.log('[ScraperService] getKakaoBookings called (Not implemented)')
+        return []
+    }
 }

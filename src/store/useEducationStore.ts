@@ -1,12 +1,12 @@
 import { create } from 'zustand'
 
-interface Student {
+export interface Student {
     id: string
     name: string
     domIdentifier?: string
     time: string
     duration: number
-    status: 'pending' | 'done'
+    status: 'pending' | 'done' | 'registered' | 'assigned' | 'completed' | 'absent'
     type: string
     generalMemo?: string
     history?: { date: string; content: string }[]
@@ -16,6 +16,7 @@ interface Student {
 interface EducationState {
     students: Student[]
     selectedId: string | null
+    selectedDate: string // YYYY-MM-DD format
     operationTime: string
     loading: boolean
     isLoggedIn: boolean
@@ -25,6 +26,7 @@ interface EducationState {
 
     setStudents: (students: Student[] | ((prev: Student[]) => Student[])) => void
     setSelectedId: (id: string | null) => void
+    setSelectedDate: (date: string) => void
     setOperationTime: (time: string) => void
     setLoading: (loading: boolean) => void
     setIsLoggedIn: (isLoggedIn: boolean) => void
@@ -40,6 +42,7 @@ interface EducationState {
 export const useEducationStore = create<EducationState>((set) => ({
     students: [],
     selectedId: null,
+    selectedDate: new Date().toISOString().split('T')[0], // Default to today
     operationTime: '',
     loading: false,
     isLoggedIn: false,
@@ -50,6 +53,7 @@ export const useEducationStore = create<EducationState>((set) => ({
         students: typeof students === 'function' ? students(state.students) : students
     })),
     setSelectedId: (id) => set({ selectedId: id }),
+    setSelectedDate: (date) => set({ selectedDate: date }),
     setOperationTime: (time) => set({ operationTime: time }),
     setLoading: (loading) => set({ loading }),
     setIsLoggedIn: (isLoggedIn) => set({ isLoggedIn }),

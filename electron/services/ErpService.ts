@@ -1,9 +1,24 @@
 import { chromium } from 'playwright'
 import type { Browser, Page } from 'playwright'
+import { performance } from 'node:perf_hooks'
 import * as cheerio from 'cheerio'
 import iconv from 'iconv-lite';
-import { ipcMain } from 'electron'
-import type { DailyData, Student, Customer, ReservationData } from './types.ts'
+import { app, ipcMain } from 'electron'
+
+import { promises as fs } from 'node:fs'
+import path from 'node:path'
+import { Logger } from '../utils/logger'
+import type { DailyData, Student, Customer, ReservationData, WeeklyReservationDetail, WeeklyReservationExportResult, WeeklyReservationDetailsResult, ErpScheduleEventWithResource } from './types.ts'
+
+
+
+export type ReservationEditUpdates = {
+    newDate?: string
+    startTime?: string
+    endTime?: string
+    machineValue?: string
+    contents?: string
+}
 
 export class ErpService {
     private browser: Browser | null = null
@@ -11,9 +26,29 @@ export class ErpService {
     private isHeadless: boolean = true
     private isBusy: boolean = false
 
-    constructor() {
-        this.registerIpcHandlers()
+
+    private getStoredCredentials(): { id: string; password: string } | null {
+        const id = process.env.ERP_ID || ''
+        const password = process.env.ERP_PASSWORD || ''
+        if (!id || !password) return null
+        return { id, password }
     }
+
+    private async loginWithStoredCredentials(): Promise<boolean> {
+        const creds = this.getStoredCredentials()
+        if (!creds) {
+            console.error('[ErpService] Missing stored ERP credentials')
+            return false
+        }
+        return this.login(creds.id, creds.password)
+    }
+
+    constructor(options?: { registerIpcHandlers?: boolean }) {
+        if (options?.registerIpcHandlers !== false) {
+            this.registerIpcHandlers()
+        }
+    }
+
 
     private registerIpcHandlers() {
         ipcMain.handle('erp:login', async (_, { id, password }) => {
@@ -26,8 +61,8 @@ export class ErpService {
             return await this.createReservation(data)
         })
 
-        ipcMain.handle('erp:getTodayEducation', async () => {
-            return await this.getTodayEducation()
+        ipcMain.handle('erp:getEducationByDate', async (_, { date }) => {
+            return await this.getEducationByDate(date)
         })
 
         ipcMain.handle('erp:getStudentDetail', async (_, { id }) => {
@@ -51,6 +86,22 @@ export class ErpService {
             return await this.updateHistory(id, oldHistory, newHistory)
         })
 
+        ipcMain.handle('erp:cancelReservation', async (_, { id, date }) => {
+            return await this.cancelReservation(id, date)
+        })
+
+        ipcMain.handle('erp:markAbsent', async (_, { id, date }) => {
+            return await this.markAbsent(id, date)
+        })
+
+        ipcMain.handle('erp:unmarkAbsent', async (_, { id, date }) => {
+            return await this.unmarkAbsent(id, date)
+        })
+
+        ipcMain.handle('erp:updateReservation', async (_, { id, date, updates }) => {
+            return await this.updateReservation(id, date, updates)
+        })
+
         ipcMain.handle('erp:setHeadless', async (_, { headless }) => {
             if (this.isHeadless !== headless) {
                 this.isHeadless = headless
@@ -69,6 +120,22 @@ export class ErpService {
 
         ipcMain.handle('erp:getSchedule', async (_, { startDate, endDate }) => {
             return await this.getSchedule(startDate, endDate)
+        })
+
+        ipcMain.handle('erp:getResourceSchedule', async (_, { startDate, endDate }) => {
+            return await this.getResourceSchedule(startDate, endDate)
+        })
+
+        ipcMain.handle('erp:exportWeeklyReservations', async (_, { startDate, endDate }) => {
+            return await this.exportWeeklyReservations(startDate, endDate)
+        })
+
+        ipcMain.handle('erp:getWeeklyReservationDetails', async (_, { startDate, endDate, options }) => {
+            return await this.getWeeklyReservationDetails(startDate, endDate, options)
+        })
+
+        ipcMain.handle('erp:dumpBookingInfo', async (_, { id }) => {
+            return await this.dumpBookingInfo(id)
         })
 
     }
@@ -180,8 +247,8 @@ export class ErpService {
         }
     }
 
-    public async getTodayEducation(): Promise<DailyData> {
-        console.log('[ErpService] getTodayEducation called (Throttled Network Mode)');
+    public async getEducationByDate(targetDate?: string): Promise<DailyData> {
+        console.log(`[ErpService] getEducationByDate called for date: ${targetDate || 'today'}`);
 
         if (!this.browser) await this.start();
         if (!this.page) return { operationTime: '', students: [] };
@@ -190,7 +257,7 @@ export class ErpService {
         // Ensure we are on Calendar
         const isCalendar = page.url().includes('calender');
         if (!isCalendar) {
-            await this.login('dobong', '1010');
+            await this.loginWithStoredCredentials();
             await page.waitForTimeout(1000);
             if (!page.url().includes('calender')) {
                 await page.goto('http://sook0517.cafe24.com/index/calender');
@@ -208,11 +275,18 @@ export class ErpService {
 
         // 1. Scan Metadata & Operation Time (Browser Context)
 
-        // Pass today's date (server time approx) to filter
-        const todayStr = new Date(new Date().getTime() + (9 * 60 * 60 * 1000)).toISOString().split('T')[0];
-        console.log(`[ErpService] Filtering events for today: ${todayStr}`);
+        // Use provided date or default to today (KST)
+        const dateStr = targetDate || new Date(new Date().getTime() + (9 * 60 * 60 * 1000)).toISOString().split('T')[0];
+        console.log(`[ErpService] Filtering events for date: ${dateStr}`);
 
-        const scanResult = await page.evaluate((targetDate) => {
+        // Navigate calendar to the target date first
+        await page.evaluate((date) => {
+            // @ts-ignore
+            $('#calendar').fullCalendar('gotoDate', date);
+        }, dateStr);
+        await page.waitForTimeout(500); // Wait for calendar to update
+
+        const scanResult = await page.evaluate((filterDate) => {
             // @ts-ignore
             const $ = window.$;
             const events: any[] = [];
@@ -225,7 +299,7 @@ export class ErpService {
 
                 // Date Filter
                 const eventDate = fcEvent.start.format('YYYY-MM-DD');
-                if (eventDate !== targetDate) return;
+                if (eventDate !== filterDate) return;
 
                 // Check Operation Time
                 if (fcEvent.title && fcEvent.title.includes('운영')) {
@@ -244,7 +318,7 @@ export class ErpService {
                 });
             });
             return { events, opTime };
-        }, todayStr);
+        }, dateStr);
 
         console.log(`[ErpService] Found ${scanResult.events.length} students. OpTime: ${scanResult.opTime}`);
 
@@ -305,6 +379,7 @@ export class ErpService {
                 if (ev.className.includes('bg_blue')) status = 'registered';
                 else if (ev.className.includes('bg_green')) status = 'assigned';
                 else if (ev.className.includes('bg_yellow')) status = 'completed';
+                else if (ev.className.includes('bg_red')) status = 'absent';
 
                 students.push({
                     id: String(ev.id),
@@ -555,7 +630,7 @@ export class ErpService {
             }
 
             // LOGIN CHECK
-            const loginSuccess = await this.login('dobong', '1010')
+            const loginSuccess = await this.loginWithStoredCredentials()
             if (!loginSuccess) {
                 console.error('[ErpService] Login failed during updateMemo')
                 this.isBusy = false
@@ -597,7 +672,7 @@ export class ErpService {
             }
 
             // 1. Login ONCE
-            const loginSuccess = await this.login('dobong', '1010')
+            const loginSuccess = await this.loginWithStoredCredentials()
             if (!loginSuccess) {
                 console.error('[ErpService] Login failed during batch')
                 this.isBusy = false
@@ -832,7 +907,7 @@ export class ErpService {
                 return false
             }
 
-            const loginSuccess = await this.login('dobong', '1010')
+            const loginSuccess = await this.loginWithStoredCredentials()
             if (!loginSuccess) {
                 this.isBusy = false
                 return false
@@ -894,42 +969,35 @@ export class ErpService {
 
         // 3. Map Product/Options to Goods ID
         // 3. Map Product/Options to Goods ID
-        let goodsIdx = "6268"; // Default (fallback)
+        let goodsIdx: string | "NONE" = "NONE"; // Default: No product (unless explicitly mapped)
         const p = naverBooking.product || '';
         const o = naverBooking.options || '';
         const full = (p + o).replace(/\s/g, '');
 
         console.log(`[ErpService] Mapping - Product: "${p}", Option: "${o}"`);
 
-        // Mapping Logic based on mapping.csv
-        if (p.includes('이용문의') || p.includes('상담')) {
-            // 1,2종 면허취득 및 장롱면허 이용문의 -> NONE
+        // PRIORITY 1: 무료체험/체험권 → 상품없음
+        if (p.includes('무료체험') || p.includes('체험권')) {
             goodsIdx = "NONE";
-        } else if (p.includes('체험권') && o.includes('2종자동')) {
-            goodsIdx = "6236";
-        } else if (o.includes('1종자동') && o.includes('기능') && o.includes('도로')) {
-            goodsIdx = "6226"; // 1종자동(기능+도로)
-        } else if (o.includes('1종수동') && o.includes('기능') && o.includes('도로')) {
-            goodsIdx = "6229"; // 1종수동(기능+도로)
-        } else if (o === '1종자동' || full.includes('1종자동')) {
-            // Strictly just 1종자동 (if not caught above)
-            goodsIdx = "6240";
-        } else if (o === '1종수동' || full.includes('1종수동')) {
-            goodsIdx = "6244";
-        } else if (p.includes('합격무제한') || o.includes('2종(기능+도로)')) {
-            goodsIdx = "6223";
-        } else if (o.includes('1종') && o.includes('도로')) {
-            goodsIdx = "6228"; // 1종(도로)
-        } else if (o.includes('2종') && o.includes('도로')) {
-            goodsIdx = "6222"; // 2종(도로)
-        } else if (o.includes('2종') && o.includes('기능')) {
-            goodsIdx = "6221"; // 2종(기능)
-        } else if (o.includes('6시간')) {
-            goodsIdx = "6237";
-        } else if (o.includes('12시간')) {
-            goodsIdx = "6238";
-        } else if (o.includes('24시간')) {
-            goodsIdx = "6239";
+            console.log('[ErpService] Free trial detected → No Product');
+        }
+        // PRIORITY 2: 상담/이용문의 → 상품없음
+        else if (p.includes('이용문의') || p.includes('상담')) {
+            goodsIdx = "NONE";
+            console.log('[ErpService] Consultation detected → No Product');
+        }
+        // PRIORITY 3: 종별 매핑 (옵션 기준, 시간제 상품만 사용)
+        else if (o.includes('2종') || full.includes('2종')) {
+            goodsIdx = "6236"; // 2종: [개설][시간제][2종][1시간]
+            console.log('[ErpService] → Mapped to 2종 (6236)');
+        }
+        else if (o.includes('1종자동') || full.includes('1종자동')) {
+            goodsIdx = "6240"; // 1종자동: [개설][시간제][1자동][1시간]
+            console.log('[ErpService] → Mapped to 1종자동 (6240)');
+        }
+        else if (o.includes('1종수동') || full.includes('1종수동')) {
+            goodsIdx = "6244"; // 1종수동: [개설][시간제][1수동][1시간]
+            console.log('[ErpService] → Mapped to 1종수동 (6244)');
         }
 
         // Special Case: Consultation Duration Override
@@ -962,6 +1030,88 @@ export class ErpService {
         return await this.createReservation(payload);
     }
 
+    /**
+     * Find the first available dobong seat (1-6) for the given time slot
+     */
+    private async findAvailableDobongSeat(date: string, startTime: string, endTime: string): Promise<string | null> {
+        if (!this.page) return null;
+        const page = this.page;
+
+        try {
+            // Parse start time to minutes
+            const [sh, sm] = startTime.split(':').map(Number);
+            const [eh, em] = endTime.split(':').map(Number);
+            const startMinutes = sh * 60 + sm;
+            const endMinutes = eh * 60 + em;
+
+            const availableSeat = await page.evaluate((arg) => {
+                // @ts-ignore
+                const $ = window.$;
+                const events = $('#calendar').fullCalendar('clientEvents');
+                const { date, startMin, endMin } = arg;
+
+                // Track which seats are occupied at the given time
+                const occupiedSeats: Set<string> = new Set();
+
+                // Check all events for time overlap
+                for (const e of events) {
+                    if (!e.start || !e.end) continue;
+
+                    // Check if event is on the same date
+                    const eventDate = e.start.format('YYYY-MM-DD');
+                    if (eventDate !== date) continue;
+
+                    // Check time overlap
+                    const eventStartMin = e.start.hour() * 60 + e.start.minute();
+                    const eventEndMin = e.end.hour() * 60 + e.end.minute();
+
+                    // Check if time ranges overlap
+                    if (startMin < eventEndMin && endMin > eventStartMin) {
+                        // Time overlap detected
+                        // Try to determine which seat this event occupies
+                        // Check title for seat information
+                        if (e.title) {
+                            const title = String(e.title);
+                            // Look for dobong-1~6 in title
+                            for (let i = 1; i <= 6; i++) {
+                                if (title.includes(`dobong-${i}`) || title.includes(`DOBONG-${i}`)) {
+                                    occupiedSeats.add(`dobong-${i}`);
+                                    break;
+                                }
+                            }
+                        }
+
+                        // Also check className for seat information
+                        if (e.className && Array.isArray(e.className)) {
+                            for (const cls of e.className) {
+                                if (cls.includes('dobong-')) {
+                                    occupiedSeats.add(cls);
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Find the first available seat (1-6)
+                for (let i = 1; i <= 6; i++) {
+                    const seatId = `dobong-${i}`;
+                    if (!occupiedSeats.has(seatId)) {
+                        return seatId;
+                    }
+                }
+
+                // If all seats are occupied, return null
+                return null;
+            }, { date, startMin: startMinutes, endMin: endMinutes });
+
+            return availableSeat;
+        } catch (e) {
+            console.error('[ErpService] Error finding available dobong seat:', e);
+            return null;
+        }
+    }
+
     async createReservation(data: any): Promise<boolean> {
         console.log(`[ErpService] createReservation called for ${data.name}, type: ${data.memberType || 'auto'}`)
 
@@ -973,24 +1123,45 @@ export class ErpService {
             const goodsIdx = data.goods_idx || '';
 
             if (goodsIdx === 'NONE' || product.includes('상담') || product.includes('이용문의')) {
-                seatId = 'dobong-9';
+                // For consultation/productless, try to find an available dobong-1~6 seat
+                // If not available, fall back to dobong-9
+                const availableSeat = await this.findAvailableDobongSeat(data.date, data.start_time, data.end_time);
+                seatId = availableSeat || 'dobong-9';
+                console.log(`[ErpService] Consultation seat ID: ${seatId} (found: ${availableSeat ? 'yes' : 'no'})`);
             } else {
                 seatId = 'dobong-1';
             }
             console.log(`[ErpService] Seat ID inferred: ${seatId}`);
         }
 
+        const timerStartMs = Logger.startTimer(`erp:createReservation ${data.name} ${data.date} ${data.start_time}`)
+        const overallStart = performance.now()
+
         try {
             await this.start()
             if (!this.page) return false
             const page = this.page
 
-            // 1. Ensure Calendar Page
+            // 1. Ensure Login + Calendar
+            if (!page.url().includes('/index/calender') && !page.url().includes('/index/main')) {
+                const loginOk = await this.loginWithStoredCredentials()
+                if (!loginOk) {
+                    Logger.error('[ErpService] createReservation: login failed')
+                    return false
+                }
+            }
+
             if (!page.url().includes('/index/calender')) {
                 await page.goto('http://sook0517.cafe24.com/index/calender', { waitUntil: 'domcontentloaded' })
             }
 
-            // 2. Open Modal
+            await page.waitForSelector('#calendar', { timeout: 10000 })
+            await page.waitForFunction(() => {
+                // @ts-ignore
+                return !!window.$ && typeof window.$('#calendar').fullCalendar === 'function'
+            }, null, { timeout: 10000 })
+
+            // 2. Navigate Calendar + Open Day View
             await page.evaluate((date) => {
                 // @ts-ignore
                 $('#calendar').fullCalendar('gotoDate', date);
@@ -998,7 +1169,20 @@ export class ErpService {
                 $('#calendar').fullCalendar('changeView', 'agendaDay');
             }, data.date);
 
-            await page.waitForTimeout(1000)
+            await page.waitForFunction((date) => {
+                // @ts-ignore
+                const $ = window.$;
+                if (!$) return false;
+                try {
+                    // @ts-ignore
+                    const current = $('#calendar').fullCalendar('getDate');
+                    // @ts-ignore
+                    const view = $('#calendar').fullCalendar('getView');
+                    return current && current.format('YYYY-MM-DD') === date && view && view.name === 'agendaDay';
+                } catch {
+                    return false;
+                }
+            }, data.date, { timeout: 8000 })
 
             // Check for Duplicate Reservation (Optimistic Check)
             const isDuplicate = await page.evaluate((arg) => {
@@ -1046,12 +1230,39 @@ export class ErpService {
             await page.evaluate((date) => {
                 // @ts-ignore
                 $('#insDate').val(date);
+                // @ts-ignore
                 try { $('#insDate').datepicker('destroy'); } catch (e) { }
                 // @ts-ignore
                 $('#insDate').trigger('change');
             }, data.date);
 
-            await page.waitForTimeout(800);
+            // Wait until machine options are populated after date selection (required)
+            let machineOptionsReady = false
+            for (let attempt = 0; attempt < 3; attempt++) {
+                machineOptionsReady = await page
+                    .waitForFunction((selector) => {
+                        const sel = document.querySelector(`${selector} #insMachine`) as HTMLSelectElement | null
+                        return !!sel && !!sel.options && sel.options.length > 1
+                    }, modalSelector, { timeout: 6000 })
+                    .then(() => true)
+                    .catch(() => false)
+
+                if (machineOptionsReady) break
+
+                // Re-trigger date change to force machine list refresh
+                await page
+                    .evaluate(() => {
+                        // @ts-ignore
+                        try { $('#insDate').trigger('change') } catch { }
+                    })
+                    .catch(() => {
+                        // ignore
+                    })
+            }
+
+            if (!machineOptionsReady) {
+                throw new Error('Machine options not loaded after date selection')
+            }
 
             // 4. Time Selection
             const [sH, sM] = data.start_time.split(':');
@@ -1070,11 +1281,11 @@ export class ErpService {
                     await page.click(`${modalSelector} input.type_member_a`);
                     await page.waitForTimeout(200);
 
-                    let found = false;
+                    // let found = false;
                     if (data.customerId) {
                         console.log(`[ErpService] Selecting member by ID: ${data.customerId}`);
                         await page.selectOption(`${modalSelector} #member_select`, data.customerId);
-                        found = true;
+                        // found = true;
                     } else {
                         const memberValue = await page.evaluate((targetName) => {
                             // @ts-ignore
@@ -1095,7 +1306,7 @@ export class ErpService {
                         if (memberValue) {
                             console.log(`[ErpService] Found existing member: ${data.name} -> ${memberValue}`);
                             await page.selectOption(`${modalSelector} #member_select`, memberValue);
-                            found = true;
+                            // found = true;
                         } else {
                             console.warn(`[ErpService] Member ${data.name} not found in dropdown. Falling back to New Member input.`);
                             isExistingMember = false; // Trigger fallback
@@ -1122,7 +1333,7 @@ export class ErpService {
             }
 
             // 7. Product Selection - Handle NONE (Consultation)
-            const goodsVal = data.goods_idx || "6268";
+            const goodsVal = data.goods_idx || "NONE";
 
             try {
                 if (goodsVal === "NONE") {
@@ -1164,59 +1375,99 @@ export class ErpService {
                 await page.selectOption(`${modalSelector} .payment_select`, "12"); // Naver Pay
             } catch (e) { }
 
-            // 9. Seat Selection (Retry Logic)
-            console.log(`[ErpService] Selecting seat: ${seatId}`);
-            let seatSelected = false;
+            // 9. Seat Selection
+            // For "상품없음/무료체험" 계열은 특정 좌석(dobong-1/2/3/5/6/9) 중 아무거나라도 가능해야 함.
+            const preferredSeats: string[] = []
+            if (seatId) preferredSeats.push(seatId)
+            if (goodsVal === 'NONE') {
+                for (const s of ['dobong-1', 'dobong-2', 'dobong-3', 'dobong-5', 'dobong-6', 'dobong-9']) {
+                    if (!preferredSeats.includes(s)) preferredSeats.push(s)
+                }
+            }
 
-            for (let i = 0; i < 5; i++) {
-                const options = await page.evaluate((selector) => {
-                    // @ts-ignore
-                    const sel = $(`${selector} select#insMachine`);
-                    const opts: any[] = [];
-                    // @ts-ignore
-                    sel.find('option').each(function () {
-                        // @ts-ignore
-                        opts.push({ text: $(this).text(), value: $(this).val() });
-                    });
-                    return opts;
-                }, modalSelector);
+            const seatResult = await page.evaluate((arg) => {
+                const { selector, preferredSeats } = arg as any
+                // @ts-ignore
+                const $ = window.$
+                if (!$) return { ok: false, reason: 'jquery missing' }
 
-                if (options.length <= 1) { // Only default option
-                    await page.waitForTimeout(500);
-                    continue;
+                // @ts-ignore
+                const sel = $(`${selector} select#insMachine`)
+                if (!sel || sel.length === 0) return { ok: false, reason: 'insMachine select missing' }
+
+                const options: { text: string; value: string; norm: string }[] = []
+                // @ts-ignore
+                sel.find('option').each(function () {
+                    // @ts-ignore
+                    const text = String($(this).text() || '').trim()
+                    // @ts-ignore
+                    const value = String($(this).val() || '').trim()
+                    if (!value) return
+                    options.push({ text, value, norm: (text + ' ' + value).toLowerCase() })
+                })
+
+                if (options.length === 0) {
+                    return { ok: false, reason: 'no seat options', optionCount: 0 }
                 }
 
-                let targetVal = null;
+                const tryPick = (seatId: string) => {
+                    const id = String(seatId || '').toLowerCase()
+                    if (!id) return null
 
-                // Explicit Mapping for Consultation Seat
-                if (seatId === 'dobong-9') {
-                    const found = options.find((o: any) => o.value == '28' || o.text.includes('dobong-9'));
-                    if (found) targetVal = found.value;
-                }
-
-                if (!targetVal) {
-                    // Exact -> Partial -> Number match
-                    const exact = options.find((o: any) => o.text === seatId);
-                    if (exact) targetVal = exact.value;
-                    else {
-                        const partial = options.find((o: any) => o.text.includes(seatId));
-                        if (partial) targetVal = partial.value;
+                    // Special case: dobong-9 often maps to numeric value 28
+                    if (id === 'dobong-9') {
+                        const found9 = options.find(o => o.value === '28' || o.norm.includes('dobong-9') || o.norm.includes('dobong 9') || o.norm.includes('도봉-9') || o.norm.includes('도봉 9'))
+                        if (found9) return found9
                     }
+
+                    const exact = options.find(o => o.norm.includes(id))
+                    if (exact) return exact
+
+                    // Fallback: match by seat number with basic boundary (avoid matching 1 in 10)
+                    const parts = id.split('-')
+                    const n = parts.length >= 2 ? parts[1] : ''
+                    if (n) {
+                        const reDobong = new RegExp(`(dobong\\s*[- ]?${n})(?!\\d)`, 'i')
+                        const reKorean = new RegExp(`(도봉\\s*[- ]?${n})(?!\\d)`, 'i')
+                        const byNumber = options.find(o => reDobong.test(o.text) || reDobong.test(o.value) || reKorean.test(o.text) || reKorean.test(o.value))
+                        if (byNumber) return byNumber
+                    }
+
+                    return null
                 }
 
-                if (targetVal) {
-                    await page.selectOption(`${modalSelector} #insMachine`, targetVal);
-                    seatSelected = true;
-                    break;
+                let picked: any = null
+                for (const s of preferredSeats as string[]) {
+                    picked = tryPick(s)
+                    if (picked) break
                 }
-                await page.waitForTimeout(500);
+
+                // If still not found, pick the first available option as last resort
+                if (!picked) picked = options[0]
+
+                // @ts-ignore
+                sel.val(picked.value).trigger('change')
+                // @ts-ignore
+                const selectedVal = String(sel.val() || '')
+
+                return {
+                    ok: !!selectedVal,
+                    pickedSeatText: picked.text,
+                    value: picked.value,
+                    optionCount: options.length,
+                    sample: options.slice(0, 8).map(o => ({ text: o.text, value: o.value }))
+                }
+            }, { selector: modalSelector, preferredSeats })
+
+            if (!seatResult?.ok) {
+                console.warn('[ErpService] Seat selection failed', seatResult)
+                throw new Error('Seat selection failed')
             }
 
-            if (!seatSelected) {
-                console.warn(`[ErpService] Could not find seat option for ${seatId}. Proceeding without specific seat.`);
-            }
+            console.log(`[ErpService] Seat selected -> ${seatResult.value} (${seatResult.pickedSeatText})`)
 
             // 10. Submit
+
             if (data.dryRun) {
                 console.log('[ErpService] DryRun: Skipping final submit click and closing modal.');
                 try {
@@ -1230,9 +1481,11 @@ export class ErpService {
 
             // Dialog Handler to catch alerts
             page.once('dialog', async dialog => {
-                console.log(`[ErpService] Dialog detected: ${dialog.message()}`);
-                await dialog.dismiss();
-            });
+                console.log(`[ErpService] Dialog detected: ${dialog.message()}`)
+                await dialog.accept().catch(() => {
+                    // ignore
+                })
+            })
 
             // Debug: Log values before submit
             const debugVals = await page.evaluate((selector) => {
@@ -1277,10 +1530,21 @@ export class ErpService {
                     $('.modal').modal('hide');
                 });
             } catch { }
-            return false;
+            return false
+        } finally {
+            Logger.endTimer(`erp:createReservation ${data.name} ${data.date} ${data.start_time}`, timerStartMs)
+            const totalMs = Math.round(performance.now() - overallStart)
+            Logger.info(`[ErpService] createReservation total ${totalMs}ms`, {
+                name: data.name,
+                date: data.date,
+                start_time: data.start_time,
+                end_time: data.end_time
+            })
         }
     }
+
     async registerReservation(data: ReservationData): Promise<boolean> {
+
         console.log(`[ErpService] registerReservation called for ${data.name} on ${data.date}`)
 
         const startTime = data.time
@@ -1313,19 +1577,12 @@ export class ErpService {
         try {
             // Ensure Calendar
             if (!page.url().includes('/index/calender')) {
-                await this.login('dobong', '1010')
+                await this.loginWithStoredCredentials()
                 await page.waitForTimeout(1000)
                 if (!page.url().includes('/index/calender')) {
                     await page.goto('http://sook0517.cafe24.com/index/calender')
                 }
             }
-
-            // We need to fetch events for the range.
-            // FullCalendar v3 (assumed) fetches based on view.
-            // Strategy: Switch to 'month' view and navigate to each month in range.
-            // But simpler: Use 'listYear' or similar if available, or just iterate months.
-            // Let's try fetching clientEvents if they are already loaded? No, we need to ensure they are loaded.
-            // Best way: Use 'gotoDate' to the start month, wait, then next month.
 
             const start = new Date(startDate)
             const end = new Date(endDate)
@@ -1366,7 +1623,7 @@ export class ErpService {
             }
 
             // Deduplicate by ID
-            const uniqueEvents = Array.from(new Map(events.map(item => [item.id, item])).values());
+            const uniqueEvents = Array.from(new Map(events.map(item => [item.id, item])).values())
             console.log(`[ErpService] Fetched ${uniqueEvents.length} unique events`)
 
             return uniqueEvents
@@ -1374,6 +1631,482 @@ export class ErpService {
         } catch (e) {
             console.error('[ErpService] getSchedule error:', e)
             return []
+        }
+    }
+
+    private parseResourceIdFromScheduleEvent(event: { title: string; className?: string[] | string }): string | null {
+        const fromTitle = event.title.match(/\bdobong-(\d+)\b/i)
+        if (fromTitle) {
+            const n = Number(fromTitle[1])
+            if (Number.isFinite(n) && n >= 1 && n <= 9) return `dobong-${n}`
+            return fromTitle[0].toLowerCase()
+        }
+
+
+        const className = event.className
+        if (Array.isArray(className)) {
+            for (const c of className) {
+                const m = c.match(/\bdobong-(\d+)\b/i)
+                if (m) {
+                    const n = Number(m[1])
+                    if (Number.isFinite(n) && n >= 1 && n <= 9) return `dobong-${n}`
+                    return m[0].toLowerCase()
+                }
+            }
+        } else if (typeof className === 'string') {
+            const m = className.match(/\bdobong-(\d+)\b/i)
+            if (m) {
+                const n = Number(m[1])
+                if (Number.isFinite(n) && n >= 1 && n <= 9) return `dobong-${n}`
+                return m[0].toLowerCase()
+            }
+        }
+
+
+        return null
+    }
+
+    async getResourceSchedule(startDate: string, endDate: string): Promise<ErpScheduleEventWithResource[]> {
+        const events = await this.getSchedule(startDate, endDate)
+        return events.map((e: any) => ({
+            ...e,
+            resourceId: this.parseResourceIdFromScheduleEvent({ title: e.title, className: e.className })
+        }))
+    }
+
+    private sanitizeNameFromTitle(title: string): string | null {
+        // Examples might look like: "[2종] 홍길동 15:00~16:00 dobong-1" or "홍길동/상담 10:00~10:30"
+        const noHtml = title.replace(/<[^>]*>/g, '')
+        const noBracket = noHtml.replace(/\[.*?\]/g, '').trim()
+        const noTime = noBracket.replace(/\b\d{1,2}:\d{2}~\d{1,2}:\d{2}\b/g, '').trim()
+        const noResource = noTime.replace(/\bdobong-\d+\b/gi, '').trim()
+        const name = noResource.split(/\s+/)[0]?.trim()
+        return name || null
+    }
+
+    private parseDobongResourceIdFromMachineToken(token: string): string | null {
+        const trimmed = (token || '').trim()
+        if (!trimmed) return null
+
+        const m = trimmed.match(/\bdobong-(\d+)\b/i)
+        if (m) {
+            const n = Number(m[1])
+            if (Number.isFinite(n) && n >= 1 && n <= 9) return `dobong-${n}`
+        }
+
+
+        const numPrefix = trimmed.match(/^\s*(\d{1,3})(?::|$)/)
+        if (numPrefix) {
+            const n = Number(numPrefix[1])
+            if (Number.isFinite(n)) {
+                // Known ERP mapping: machine_info_idx 20..28 -> dobong-1..9
+                if (n >= 20 && n <= 28) return `dobong-${n - 19}`
+                if (n >= 1 && n <= 9) return `dobong-${n}`
+            }
+        }
+
+        const ho = trimmed.match(/(\d)\s*호/)
+        if (ho) return `dobong-${ho[1]}`
+
+        const koreanDobong = trimmed.match(/도봉\s*[-\s]?(\d)/)
+        if (koreanDobong) return `dobong-${koreanDobong[1]}`
+
+
+        return null
+    }
+
+    private parseResourceIdFromBookingInfoHtml($: ReturnType<typeof cheerio.load>): string | null {
+        const candidates: unknown[] = [
+            $('#insMachine').val(),
+            $('#insMachine option:selected').val(),
+            $('#insMachine option:selected').text(),
+            $('select[name="machine_info_idx"]').val(),
+            $('select[name="machine_info_idx"] option:selected').val(),
+            $('select[name="machine_info_idx"] option:selected').text(),
+        ]
+
+        for (const c of candidates) {
+            if (c == null) continue
+            const token = String(c)
+            const rid = this.parseDobongResourceIdFromMachineToken(token)
+            if (rid) return rid
+        }
+
+        return null
+    }
+
+    private parseStatusFromClassName(className: string[] | string | undefined): WeeklyReservationDetail['status'] {
+        const str = Array.isArray(className) ? className.join(' ') : (className || '')
+        if (str.includes('bg_blue')) return 'registered'
+        if (str.includes('bg_green')) return 'assigned'
+        if (str.includes('bg_yellow')) return 'completed'
+        if (str.includes('bg_red')) return 'absent'
+        return 'unknown'
+    }
+
+    private formatYmdFromDate(date: Date): string {
+        const y = date.getFullYear()
+        const m = String(date.getMonth() + 1).padStart(2, '0')
+        const d = String(date.getDate()).padStart(2, '0')
+        return `${y}-${m}-${d}`
+    }
+
+    private formatHmFromDate(date: Date): string {
+        return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
+    }
+
+    private async fetchBookingInfoHtml(eventId: string): Promise<string> {
+        if (!this.page) return ''
+        const page = this.page
+        const context = page.context()
+
+        const response = await context.request.post('http://sook0517.cafe24.com/index.php/dataFunction/getBookingInfo', {
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+                'Referer': 'http://sook0517.cafe24.com/index/calender',
+                'Origin': 'http://sook0517.cafe24.com',
+                'X-Requested-With': 'XMLHttpRequest',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            },
+            form: { idx: eventId, branch_idx: 4 }
+        })
+
+        const buffer = await response.body()
+        const decodedBody = iconv.decode(buffer as Buffer, 'euc-kr')
+
+        try {
+            const jsonResponse = JSON.parse(decodedBody)
+
+            // Case 1) Modern ERP returns JSON fields directly (no HTML)
+            const idCandidate = (() => {
+                const v = (jsonResponse as any)?.ID ?? (jsonResponse as any)?.machine_info_idx ?? (jsonResponse as any)?.MACHINE
+                if (v == null) return ''
+                // ERP may return number or string
+                return typeof v === 'string' || typeof v === 'number' ? String(v) : ''
+            })()
+
+            const parsedFromId = idCandidate ? this.parseDobongResourceIdFromMachineToken(String(idCandidate)) : null
+            if (parsedFromId) {
+                // Build a tiny HTML snippet so downstream cheerio parsing still works.
+                return `<select id="insMachine" name="machine_info_idx"><option value="${String(idCandidate)}" selected>dobong</option></select>`
+            }
+
+            // Case 2) ERP sometimes returns JSON with embedded HTML in some string fields.
+            const stringValues = Object.values(jsonResponse).filter((v): v is string => typeof v === 'string')
+            const htmlCandidate = stringValues.find(v => /<select\b/i.test(v) || /\binsMachine\b/i.test(v) || /\bmachine_info_idx\b/i.test(v))
+            if (htmlCandidate && htmlCandidate.trim()) return htmlCandidate
+
+            // Case 3) Fallback to MEMO (may contain HTML in older versions)
+            const memo = typeof (jsonResponse as any)?.MEMO === 'string' ? (jsonResponse as any).MEMO : ''
+            if (memo && memo.trim()) return memo
+
+            // Otherwise, return raw JSON string (debug)
+            return decodedBody
+        } catch {
+            return decodedBody
+        }
+    }
+
+    private summarizeSelectElements($: ReturnType<typeof cheerio.load>) {
+        const selects: Array<{
+            id: string | null
+            name: string | null
+            value: string | null
+            selectedText: string | null
+            optionPreview: string[]
+        }> = []
+
+        $('select').each((_, el) => {
+            const sel = $(el)
+            const id = sel.attr('id') || null
+            const name = sel.attr('name') || null
+
+            const selected = sel.find('option:selected').first()
+            const value = (selected.attr('value') ?? sel.val() ?? null) as any
+            const selectedText = selected.text().trim() || null
+
+            const optionPreview: string[] = []
+            sel.find('option').each((i, opt) => {
+                if (i >= 30) return false
+                const t = $(opt).text().trim()
+                if (t) optionPreview.push(t)
+                return
+            })
+
+            selects.push({
+                id,
+                name,
+                value: value != null ? String(value) : null,
+                selectedText,
+                optionPreview,
+            })
+        })
+
+        return selects
+    }
+
+    async dumpBookingInfo(id: string): Promise<{ filePath: string; parsedResourceId: string | null; selects: any[] }> {
+        await this.ensureCalendarPage()
+        if (!this.page) {
+            throw new Error('ERP page not initialized')
+        }
+
+        const html = await this.fetchBookingInfoHtml(String(id))
+        const $ = cheerio.load(html)
+
+        const parsedResourceId = this.parseResourceIdFromBookingInfoHtml($)
+        const selects = this.summarizeSelectElements($)
+
+        const exportedAt = new Date().toISOString()
+        const safeTs = exportedAt.replace(/[:.]/g, '-')
+        const dir = path.join(app.getPath('userData'), 'exports')
+        await fs.mkdir(dir, { recursive: true })
+
+        const filePath = path.join(dir, `bookingInfo_${id}_${safeTs}.html`)
+        const latestPath = path.join(dir, `bookingInfo_${id}_latest.html`)
+        await fs.writeFile(filePath, html, 'utf-8')
+        await fs.writeFile(latestPath, html, 'utf-8')
+
+        return { filePath, parsedResourceId, selects }
+    }
+
+    private getWeeklyExportPaths(startDate: string, endDate: string) {
+        const dir = path.join(app.getPath('userData'), 'exports')
+        const latestJsonPath = path.join(dir, `weekly_reservations_${startDate}_${endDate}_latest.json`)
+        const latestCsvPath = path.join(dir, `weekly_reservations_${startDate}_${endDate}_latest.csv`)
+        return { dir, latestJsonPath, latestCsvPath }
+    }
+
+    private async fetchWeeklyReservationItems(startDate: string, endDate: string): Promise<WeeklyReservationDetail[]> {
+        await this.ensureCalendarPage()
+        if (!this.page) {
+            throw new Error('ERP page not initialized')
+        }
+
+        const events = await this.getResourceSchedule(startDate, endDate)
+
+        const start = new Date(`${startDate}T00:00:00`)
+        const end = new Date(`${endDate}T23:59:59`)
+        if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+            throw new Error(`Invalid date range: ${startDate}~${endDate}`)
+        }
+
+        const items: WeeklyReservationDetail[] = []
+
+        for (const e of events) {
+            if (!e.start) continue
+            const startDt = new Date(e.start)
+            if (Number.isNaN(startDt.getTime())) continue
+
+            if (startDt < start || startDt > end) continue
+
+            const title = String(e.title || '')
+            if (title.includes('운영')) continue
+
+            const date = this.formatYmdFromDate(startDt)
+            const endDt = e.end ? new Date(e.end) : null
+
+            let resourceId: string | null = (e as any).resourceId ?? this.parseResourceIdFromScheduleEvent({ title, className: e.className })
+
+            let memo = ''
+            let history: Array<{ date: string; content: string }> = []
+            let photo = ''
+            let phone: string | null = null
+
+            try {
+                const html = await this.fetchBookingInfoHtml(String(e.id))
+                const $ = cheerio.load(html)
+
+                // Prefer explicit JSON field "ID" if present (ERP returns dobong-1..9).
+                const bookingJsonId = (() => {
+                    try {
+                        const raw = html.trim()
+                        if (!raw.startsWith('{')) return null
+                        const parsed = JSON.parse(raw)
+                        const id = parsed?.ID
+                        return typeof id === 'string' || typeof id === 'number' ? String(id) : null
+                    } catch {
+                        return null
+                    }
+                })()
+
+                const parsedResourceId = bookingJsonId
+                    ? this.parseDobongResourceIdFromMachineToken(String(bookingJsonId))
+                    : this.parseResourceIdFromBookingInfoHtml($)
+
+                if (parsedResourceId) resourceId = parsedResourceId
+
+
+                memo = ($('textarea[name="memo"]').val() as string) || ''
+                $('.form-inline').each((_, row) => {
+                    const hDate = $(row).find('.modify_comment_date').val() as string
+                    const hContent = $(row).find('.modify_comment_text').val() as string
+                    if (hDate && hContent) history.push({ date: hDate, content: hContent })
+                })
+
+                photo = $('.view_picture img').attr('src') || ''
+
+                const phoneCandidate = (
+                    ($('input#insPhone').val() as string) ||
+                    ($('input[name="phone"]').val() as string) ||
+                    ($('input[name="hp"]').val() as string) ||
+                    ($('input[name="mobile"]').val() as string) ||
+                    ''
+                ).trim()
+                phone = phoneCandidate || null
+            } catch (err) {
+                Logger.warn('[ErpService] fetchWeeklyReservationItems getBookingInfo failed', { id: e.id, err })
+            }
+
+            const name = this.sanitizeNameFromTitle(title)
+            const status = this.parseStatusFromClassName(e.className)
+
+            const entry: WeeklyReservationDetail = {
+                id: String(e.id),
+                title,
+                date,
+                start: e.start,
+                end: e.end,
+                startTime: this.formatHmFromDate(startDt),
+                endTime: endDt ? this.formatHmFromDate(endDt) : null,
+                resourceId,
+                name,
+                phone,
+                status,
+                memo,
+                history,
+                photo,
+            }
+
+            items.push(entry)
+
+            // Throttle a bit to avoid ERP limits
+            await new Promise(resolve => setTimeout(resolve, 200))
+        }
+
+        return items
+    }
+
+    async getWeeklyReservationDetails(
+        startDate: string,
+        endDate: string,
+        options?: { refresh?: boolean }
+    ): Promise<WeeklyReservationDetailsResult> {
+        const fetchedAt = new Date().toISOString()
+        const { dir, latestJsonPath, latestCsvPath: _latestCsvPath } = this.getWeeklyExportPaths(startDate, endDate)
+        await fs.mkdir(dir, { recursive: true })
+
+        if (!options?.refresh) {
+            try {
+                const raw = await fs.readFile(latestJsonPath, 'utf-8')
+                const parsed = JSON.parse(raw)
+                const items = Array.isArray(parsed?.items) ? (parsed.items as WeeklyReservationDetail[]) : []
+
+                // If cache exists but all items are unassigned, treat it as stale and refresh.
+                if (items.length > 0 && items.every(i => !i.resourceId || i.resourceId === 'unassigned')) {
+                    throw new Error('stale-cache-unassigned')
+                }
+
+                return {
+                    startDate,
+                    endDate,
+                    fetchedAt,
+                    fromCache: true,
+                    count: items.length,
+                    items,
+                }
+            } catch {
+                // ignore cache miss / stale cache
+            }
+        }
+
+        const items = await this.fetchWeeklyReservationItems(startDate, endDate)
+
+        // write latest cache for fast dashboard reload
+        await fs.writeFile(latestJsonPath, JSON.stringify({ startDate, endDate, fetchedAt, count: items.length, items }, null, 2), 'utf-8')
+
+        return {
+            startDate,
+            endDate,
+            fetchedAt,
+            fromCache: false,
+            count: items.length,
+            items,
+        }
+    }
+
+    async exportWeeklyReservations(startDate: string, endDate: string): Promise<WeeklyReservationExportResult> {
+        const timer = Logger.startTimer(`erp:exportWeeklyReservations ${startDate}~${endDate}`)
+
+        const items = await this.fetchWeeklyReservationItems(startDate, endDate)
+
+        const exportedAt = new Date().toISOString()
+        const safeTs = exportedAt.replace(/[:.]/g, '-')
+        const { dir, latestJsonPath, latestCsvPath } = this.getWeeklyExportPaths(startDate, endDate)
+        await fs.mkdir(dir, { recursive: true })
+
+        const jsonFilePath = path.join(dir, `weekly_reservations_${startDate}_${endDate}_${safeTs}.json`)
+        const csvFilePath = path.join(dir, `weekly_reservations_${startDate}_${endDate}_${safeTs}.csv`)
+
+        const jsonPayload = { startDate, endDate, exportedAt, count: items.length, items }
+        await fs.writeFile(jsonFilePath, JSON.stringify(jsonPayload, null, 2), 'utf-8')
+        await fs.writeFile(latestJsonPath, JSON.stringify({ ...jsonPayload, fetchedAt: exportedAt }, null, 2), 'utf-8')
+
+        const escapeCsv = (value: unknown) => {
+            const s = String(value ?? '')
+            const needsQuote = /[\",\r\n]/.test(s)
+            const escaped = s.replace(/\"/g, '\"\"')
+            return needsQuote ? `\"${escaped}\"` : escaped
+        }
+
+        const csvHeader = [
+            'id',
+            'date',
+            'startTime',
+            'endTime',
+            'resourceId',
+            'name',
+            'phone',
+            'status',
+            'title',
+            'memo',
+            'history',
+            'photo'
+        ].join(',')
+
+        const csvLines: string[] = [csvHeader]
+        for (const it of items) {
+            const historyText = it.history.map(h => `${h.date}/${h.content}`).join(' | ')
+            csvLines.push([
+                escapeCsv(it.id),
+                escapeCsv(it.date),
+                escapeCsv(it.startTime),
+                escapeCsv(it.endTime),
+                escapeCsv(it.resourceId),
+                escapeCsv(it.name),
+                escapeCsv(it.phone),
+                escapeCsv(it.status),
+                escapeCsv(it.title),
+                escapeCsv(it.memo),
+                escapeCsv(historyText),
+                escapeCsv(it.photo),
+            ].join(','))
+        }
+
+        // BOM + CRLF for Excel-friendly CSV on Windows
+        const csvContent = `\uFEFF${csvLines.join('\\r\\n')}\\r\\n`
+        await fs.writeFile(csvFilePath, csvContent, 'utf-8')
+        await fs.writeFile(latestCsvPath, csvContent, 'utf-8')
+
+        Logger.endTimer(`erp:exportWeeklyReservations ${startDate}~${endDate}`, timer, { count: items.length, jsonFilePath, csvFilePath })
+
+        return {
+            jsonFilePath,
+            csvFilePath,
+            startDate,
+            endDate,
+            exportedAt,
+            count: items.length,
         }
     }
 
@@ -1492,6 +2225,243 @@ export class ErpService {
         const hasDuplicate = detail.history.some(line => line.startsWith(date))
         console.log(`[ErpService] checkDuplicate for ${customer.name} on ${date}: ${hasDuplicate}`)
         return hasDuplicate
+    }
+
+    private async hideAllModals(): Promise<void> {
+        if (!this.page) return
+        await this.page.evaluate(() => {
+            // @ts-ignore
+            const $ = window.$
+            // @ts-ignore
+            if ($) $('.modal').modal('hide')
+        }).catch(() => { })
+    }
+
+    private async ensureCalendarPage(): Promise<Page | null> {
+        await this.start()
+        if (!this.page) return null
+
+        // If we are already on an authenticated ERP page, don't force stored-credential login.
+        const url = this.page.url()
+        const looksLoggedIn = url.includes('/index/')
+
+        if (!looksLoggedIn) {
+            const loginSuccess = await this.loginWithStoredCredentials()
+            if (!loginSuccess) return null
+        }
+
+        if (!this.page.url().includes('/index/calender')) {
+            await this.page.goto('http://sook0517.cafe24.com/index/calender', { waitUntil: 'domcontentloaded' })
+        }
+
+        return this.page
+    }
+
+
+    private async openEventEditModal(eventId: string, date: string): Promise<boolean> {
+        const page = await this.ensureCalendarPage()
+        if (!page) return false
+
+        await page.evaluate((d) => {
+            // @ts-ignore
+            const $ = window.$
+            // @ts-ignore
+            if ($ && $('#calendar').length) {
+                // @ts-ignore
+                $('#calendar').fullCalendar('gotoDate', d)
+                // @ts-ignore
+                $('#calendar').fullCalendar('changeView', 'agendaDay')
+            }
+        }, date)
+        await page.waitForTimeout(800)
+
+        const opened = await page.evaluate((id) => {
+            // @ts-ignore
+            const $ = window.$
+            // @ts-ignore
+            if (!$ || !$('#calendar').length) return false
+            // @ts-ignore
+            const events = $('#calendar').fullCalendar('clientEvents')
+            const ev = events.find((e: any) => String(e.id) === String(id))
+            if (!ev) return false
+            // @ts-ignore
+            $('#calendar').fullCalendar('option', 'eventClick')(ev, {}, { pageX: 0, pageY: 0 })
+            return true
+        }, eventId)
+
+        if (!opened) return false
+        await page.waitForSelector('#CalenderModalEdit', { state: 'visible', timeout: 5000 }).catch(() => { })
+        return await page.locator('#CalenderModalEdit').isVisible().catch(() => false)
+    }
+
+    private async clickModalButton(selector: string): Promise<boolean> {
+        if (!this.page) return false
+        const page = this.page
+
+        page.once('dialog', async dialog => {
+            await dialog.accept().catch(() => { })
+        })
+
+        const clicked = await page.evaluate((sel) => {
+            const btn = document.querySelector(sel) as HTMLElement | null
+            if (!btn) return false
+            btn.click()
+            return true
+        }, selector)
+
+        if (!clicked) return false
+        await page.waitForTimeout(800)
+        return true
+    }
+
+    async cancelReservation(eventId: string, date: string): Promise<boolean> {
+        if (this.isBusy) {
+            console.warn('[ErpService] Service is busy')
+            return false
+        }
+        this.isBusy = true
+
+        try {
+            const opened = await this.openEventEditModal(eventId, date)
+            if (!opened) {
+                this.isBusy = false
+                return false
+            }
+
+            const ok = await this.clickModalButton('#CalenderModalEdit button.delete_btn')
+            await this.hideAllModals()
+
+            this.isBusy = false
+            return ok
+        } catch (e) {
+            console.error('[ErpService] cancelReservation error:', e)
+            await this.hideAllModals()
+            this.isBusy = false
+            return false
+        }
+    }
+
+    async markAbsent(eventId: string, date: string): Promise<boolean> {
+        if (this.isBusy) {
+            console.warn('[ErpService] Service is busy')
+            return false
+        }
+        this.isBusy = true
+
+        try {
+            const opened = await this.openEventEditModal(eventId, date)
+            if (!opened) {
+                this.isBusy = false
+                return false
+            }
+
+            const ok = await this.clickModalButton('#CalenderModalEdit button.absent_btn')
+            await this.hideAllModals()
+
+            this.isBusy = false
+            return ok
+        } catch (e) {
+            console.error('[ErpService] markAbsent error:', e)
+            await this.hideAllModals()
+            this.isBusy = false
+            return false
+        }
+    }
+
+    async unmarkAbsent(eventId: string, date: string): Promise<boolean> {
+        if (this.isBusy) {
+            console.warn('[ErpService] Service is busy')
+            return false
+        }
+        this.isBusy = true
+
+        try {
+            const opened = await this.openEventEditModal(eventId, date)
+            if (!opened) {
+                this.isBusy = false
+                return false
+            }
+
+            const ok = await this.clickModalButton('#CalenderModalEdit button.dis_absent_btn')
+            await this.hideAllModals()
+
+            this.isBusy = false
+            return ok
+        } catch (e) {
+            console.error('[ErpService] unmarkAbsent error:', e)
+            await this.hideAllModals()
+            this.isBusy = false
+            return false
+        }
+    }
+
+    async updateReservation(eventId: string, date: string, updates: ReservationEditUpdates): Promise<boolean> {
+        if (this.isBusy) {
+            console.warn('[ErpService] Service is busy')
+            return false
+        }
+        this.isBusy = true
+
+        try {
+            const opened = await this.openEventEditModal(eventId, date)
+            if (!opened || !this.page) {
+                this.isBusy = false
+                return false
+            }
+
+            const page = this.page
+
+            if (updates.newDate) {
+                await page.locator('#CalenderModalEdit input[name="booking_date"]').first().fill(updates.newDate)
+            }
+
+            if (updates.startTime) {
+                let [h, m] = updates.startTime.split(':')
+                h = (h || '').padStart(2, '0')
+                m = (m || '').padStart(2, '0')
+                await page.selectOption('#CalenderModalEdit select[name="stime"]', h)
+                await page.selectOption('#CalenderModalEdit select[name="stime_min"]', m)
+            }
+
+            if (updates.endTime) {
+                let [h, m] = updates.endTime.split(':')
+                h = (h || '').padStart(2, '0')
+                m = (m || '').padStart(2, '0')
+                await page.selectOption('#CalenderModalEdit select[name="etime"]', h)
+                await page.selectOption('#CalenderModalEdit select[name="etime_min"]', m)
+            }
+
+            if (updates.machineValue) {
+                if (updates.machineValue.includes(':')) {
+                    await page.selectOption('#CalenderModalEdit select[name="machine_info_idx"]', updates.machineValue)
+                } else {
+                    const machineName = updates.machineValue
+                    const optionValue = await page.evaluate((name) => {
+                        const sel = document.querySelector('#CalenderModalEdit select[name="machine_info_idx"]') as HTMLSelectElement | null
+                        if (!sel) return null
+                        const opt = Array.from(sel.options).find(o => (o.textContent || '').includes(name))
+                        return opt?.value || null
+                    }, machineName)
+                    if (!optionValue) return false
+                    await page.selectOption('#CalenderModalEdit select[name="machine_info_idx"]', optionValue)
+                }
+            }
+
+            if (typeof updates.contents === 'string') {
+                await page.locator('#CalenderModalEdit textarea[name="contents"], #CalenderModalEdit #modify_contents').first().fill(updates.contents)
+            }
+
+            const ok = await this.clickModalButton('#CalenderModalEdit button.copysubmit3')
+            await this.hideAllModals()
+
+            this.isBusy = false
+            return ok
+        } catch (e) {
+            console.error('[ErpService] updateReservation error:', e)
+            await this.hideAllModals()
+            this.isBusy = false
+            return false
+        }
     }
 
 }

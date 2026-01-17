@@ -12,10 +12,18 @@ function App() {
         <div className="flex h-screen bg-gray-100">
             <Sidebar currentTab={currentTab} onTabChange={setCurrentTab} />
             <div className="flex-1 overflow-hidden">
-                {currentTab === 'dashboard' && <Dashboard />}
-                {currentTab === 'education' && <EducationManager />}
-                {currentTab === 'reservation' && <ReservationCollector />}
-                {currentTab === 'settings' && <Settings />}
+                <div className={currentTab === 'dashboard' ? 'h-full w-full overflow-auto' : 'hidden'}>
+                    <Dashboard isActive={currentTab === 'dashboard'} />
+                </div>
+                <div className={currentTab === 'education' ? 'h-full w-full' : 'hidden'}>
+                    <EducationManager />
+                </div>
+                <div className={currentTab === 'reservation' ? 'h-full w-full' : 'hidden'}>
+                    <ReservationCollector />
+                </div>
+                <div className={currentTab === 'settings' ? 'h-full w-full overflow-auto' : 'hidden'}>
+                    <Settings />
+                </div>
             </div>
         </div>
     )

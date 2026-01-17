@@ -4,7 +4,7 @@ export interface Student {
     domIdentifier?: string
     time: string
     duration: number
-    status: 'pending' | 'done' | 'registered' | 'assigned' | 'completed' // Updated status types
+    status: 'pending' | 'done' | 'registered' | 'assigned' | 'completed' | 'absent' // Updated status types
     type: string // 1종, 2종, 도로 등
     generalMemo?: string
     history?: {
@@ -19,7 +19,7 @@ export interface Student {
 export interface EducationData {
     id: string
     name: string
-    status: 'registered' | 'assigned' | 'completed'
+    status: 'registered' | 'assigned' | 'completed' | 'absent'
     time: string
     memo: string
     history: { date: string; content: string }[]
@@ -50,4 +50,56 @@ export interface ReservationData {
     time: string // HH:mm
     duration: number // hours
     type: string // 1종, 2종, etc.
+}
+
+export interface ErpScheduleEvent {
+    id: string
+    title: string
+    start: string | null
+    end: string | null
+    className?: string[] | string
+}
+
+export interface ErpScheduleEventWithResource extends ErpScheduleEvent {
+    resourceId: string | null
+}
+
+export interface WeeklyReservationHistoryItem {
+    date: string
+    content: string
+}
+
+export interface WeeklyReservationDetail {
+    id: string
+    title: string
+    date: string // YYYY-MM-DD
+    start: string | null // ISO datetime
+    end: string | null // ISO datetime
+    startTime: string | null // HH:mm
+    endTime: string | null // HH:mm
+    resourceId: string | null
+    name: string | null
+    phone: string | null
+    status: 'registered' | 'assigned' | 'completed' | 'absent' | 'unknown'
+    memo: string
+    history: WeeklyReservationHistoryItem[]
+    photo: string
+}
+
+export interface WeeklyReservationExportResult {
+    jsonFilePath: string
+    csvFilePath: string
+    startDate: string
+    endDate: string
+    exportedAt: string // ISO
+    count: number
+}
+
+export interface WeeklyReservationDetailsResult {
+    startDate: string
+    endDate: string
+    fetchedAt: string // ISO
+    fromCache: boolean
+    count: number
+    items: WeeklyReservationDetail[]
 }

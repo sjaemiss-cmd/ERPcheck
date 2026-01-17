@@ -9,6 +9,8 @@ __pycache__/
 # Distribution / packaging
 build/
 dist/
+dist_electron_builder/
+erp_dumps/
 *.egg-info/
 *.egg
 

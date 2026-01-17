@@ -9,7 +9,7 @@ interface SidebarProps {
 export function Sidebar({ currentTab, onTabChange }: SidebarProps) {
     const menuItems = [
         { id: 'dashboard' as const, label: '대시보드', icon: Home },
-        { id: 'education' as const, label: '금일 교육', icon: BookOpen },
+        { id: 'education' as const, label: '교육일지', icon: BookOpen },
         { id: 'reservation' as const, label: '예약 수집', icon: Calendar },
         { id: 'settings' as const, label: '설정', icon: Settings },
     ]

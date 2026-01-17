@@ -70,32 +70,6 @@ export function ReservationCollector() {
                 return
             }
 
-            // 상품 매핑 로직
-            const p = selectedItem.product || '';
-            const o = selectedItem.option || '';
-            const full = (p + o).replace(/\s/g, '');
-            
-            let goodsIdx: string | "NONE" = "NONE";
-            
-            // PRIORITY 1: 무료체험/체험권 → 상품없음
-            if (p.includes('무료체험') || p.includes('체험권')) {
-                goodsIdx = "NONE";
-            }
-            // PRIORITY 2: 상담/이용문의 → 상품없음
-            else if (p.includes('이용문의') || p.includes('상담')) {
-                goodsIdx = "NONE";
-            }
-            // PRIORITY 3: 종별 매핑 (옵션 기준, 시간제 상품만 사용)
-            else if (o.includes('2종') || full.includes('2종')) {
-                goodsIdx = "6236"; // 2종: [개설][시간제][2종][1시간]
-            }
-            else if (o.includes('1종자동') || full.includes('1종자동')) {
-                goodsIdx = "6240"; // 1종자동: [개설][시간제][1자동][1시간]
-            }
-            else if (o.includes('1종수동') || full.includes('1종수동')) {
-                goodsIdx = "6244"; // 1종수동: [개설][시간제][1수동][1시간]
-            }
-
             const payload = {
                 date: selectedItem.date,
                 start_time: selectedItem.startTime,
@@ -104,8 +78,7 @@ export function ReservationCollector() {
                 phone: selectedItem.phone || '',
                 product: selectedItem.product || '',
                 option: selectedItem.option || '',
-                request: selectedItem.request || '',
-                goods_idx: goodsIdx
+                request: selectedItem.request || ''
             }
 
             const success = await window.api.erp.createReservation(payload)

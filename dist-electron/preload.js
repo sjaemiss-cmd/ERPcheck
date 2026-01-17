@@ -21,9 +21,13 @@ electron.contextBridge.exposeInMainWorld("ipcRenderer", {
 electron.contextBridge.exposeInMainWorld("api", {
   erp: {
     login: (credentials) => electron.ipcRenderer.invoke("erp:login", credentials),
-    getSchedule: (weeks) => electron.ipcRenderer.invoke("erp:getSchedule", { weeks }),
+    getSchedule: (startDate, endDate) => electron.ipcRenderer.invoke("erp:getSchedule", { startDate, endDate }),
+    getResourceSchedule: (startDate, endDate) => electron.ipcRenderer.invoke("erp:getResourceSchedule", { startDate, endDate }),
+    exportWeeklyReservations: (startDate, endDate) => electron.ipcRenderer.invoke("erp:exportWeeklyReservations", { startDate, endDate }),
+    getWeeklyReservationDetails: (startDate, endDate, options) => electron.ipcRenderer.invoke("erp:getWeeklyReservationDetails", { startDate, endDate, options }),
+    dumpBookingInfo: (id) => electron.ipcRenderer.invoke("erp:dumpBookingInfo", { id }),
     createReservation: (data) => electron.ipcRenderer.invoke("erp:createReservation", { data }),
-    getTodayEducation: () => electron.ipcRenderer.invoke("erp:getTodayEducation"),
+    getEducationByDate: (date) => electron.ipcRenderer.invoke("erp:getEducationByDate", { date }),
     getStudentDetail: (id) => electron.ipcRenderer.invoke("erp:getStudentDetail", { id }),
     updateMemo: (id, memo, name, time, date) => electron.ipcRenderer.invoke("erp:updateMemo", { id, memo, name, time, date }),
     writeMemosBatch: (memoList) => electron.ipcRenderer.invoke("erp:writeMemosBatch", { memoList }),
@@ -32,7 +36,11 @@ electron.contextBridge.exposeInMainWorld("api", {
     setHeadless: (headless) => electron.ipcRenderer.invoke("erp:setHeadless", { headless }),
     fetchMembers: (options) => electron.ipcRenderer.invoke("erp:fetchMembers", options),
     registerToErp: (naverData) => electron.ipcRenderer.invoke("erp:registerToErp", naverData),
-    syncNaver: (dryRun) => electron.ipcRenderer.invoke("erp:syncNaver", { dryRun })
+    syncNaver: (dryRun) => electron.ipcRenderer.invoke("erp:syncNaver", { dryRun }),
+    cancelReservation: (id, date) => electron.ipcRenderer.invoke("erp:cancelReservation", { id, date }),
+    markAbsent: (id, date) => electron.ipcRenderer.invoke("erp:markAbsent", { id, date }),
+    unmarkAbsent: (id, date) => electron.ipcRenderer.invoke("erp:unmarkAbsent", { id, date }),
+    updateReservation: (id, date, updates) => electron.ipcRenderer.invoke("erp:updateReservation", { id, date, updates })
   },
   member: {
     list: () => electron.ipcRenderer.invoke("member:list"),
@@ -43,9 +51,5 @@ electron.contextBridge.exposeInMainWorld("api", {
     kakaoLogin: () => electron.ipcRenderer.invoke("scraper:kakaoLogin"),
     getNaverBookings: () => electron.ipcRenderer.invoke("scraper:getNaverBookings"),
     getKakaoBookings: () => electron.ipcRenderer.invoke("scraper:getKakaoBookings")
-  },
-  settings: {
-    saveCredentials: (creds) => electron.ipcRenderer.invoke("settings:saveCredentials", creds),
-    getCredentials: () => electron.ipcRenderer.invoke("settings:getCredentials")
   }
 });

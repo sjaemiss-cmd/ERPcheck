@@ -44,8 +44,15 @@ async function main() {
 
         // 2. Login
         console.log('[Dump] Logging in...');
-        await page.fill('input[name="id"]', 'dobong');
-        await page.fill('input[name="pwd"]', '1010');
+
+        const erpId = process.env.ERP_ID || '';
+        const erpPassword = process.env.ERP_PASSWORD || '';
+        if (!erpId || !erpPassword) {
+            throw new Error('Missing ERP credentials. Set ERP_ID and ERP_PASSWORD env vars.');
+        }
+
+        await page.fill('input[name="id"]', erpId);
+        await page.fill('input[name="pwd"]', erpPassword);
 
         page.once('dialog', async dialog => {
             console.log(`[Dump] Dialog: ${dialog.message()}`);

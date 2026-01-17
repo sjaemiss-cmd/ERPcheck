@@ -1,40 +1,26 @@
 import { useState, useEffect } from 'react'
 import { cn } from '../../lib/utils'
-import { RefreshCw, Square, Send, Pencil, Trash2, X, Check, Plus } from 'lucide-react'
-import { useEducationStore } from '../../store/useEducationStore'
+import { RefreshCw, Square, Send, Pencil, Trash2, X, Check, Plus, ChevronLeft, ChevronRight, Calendar, Clock, UserX, UserCheck, Ban } from 'lucide-react'
+import { useEducationStore, type Student } from '../../store/useEducationStore'
 
-interface Student {
-    id: string
-    name: string
-    domIdentifier?: string
-    time: string
-    duration: number
-    status: 'pending' | 'done'
-    type: string
-    generalMemo?: string
-    history?: { date: string; content: string }[]
-    index: number
-}
-
-// Helper to check if today is in history
-function hasTodayEducation(student: Student): boolean {
+// Helper to check if the selected date has education history
+function hasEducationOnDate(student: Student, targetDate: string): boolean {
     if (!student.history || student.history.length === 0) return false
-    const d = new Date()
-    const year = d.getFullYear()
-    const month = String(d.getMonth() + 1).padStart(2, '0')
-    const day = String(d.getDate()).padStart(2, '0')
-    const today = `${year}-${month}-${day}`
-    return student.history.some(h => h.date === today)
+    return student.history.some(h => h.date === targetDate)
 }
 
 export function EducationManager() {
     // Local UI state
     const [editingHistory, setEditingHistory] = useState<{ index: number; date: string; content: string } | null>(null)
+    const [isUpdatingReservation, setIsUpdatingReservation] = useState(false)
+    const [updateForm, setUpdateForm] = useState({ startTime: '', endTime: '', machine: '' })
+
 
     // Global Store State
     const {
         students, setStudents,
         selectedId, setSelectedId,
+        selectedDate, setSelectedDate,
         operationTime, setOperationTime,
         loading, setLoading,
         isLoggedIn, setIsLoggedIn,
@@ -55,27 +41,29 @@ export function EducationManager() {
 
     const selectedStudent = students.find(s => s.id === selectedId)
 
-    const fetchData = async () => {
-        console.log('[EducationManager] fetchData called')
+    const fetchData = async (targetDate?: string) => {
+        const dateToFetch = targetDate || selectedDate
+        console.log(`[EducationManager] fetchData called for date: ${dateToFetch}`)
         setLoading(true)
         try {
             // Auto Login - Only if not already tracked as logged in
             // OR if we want to ensure session is alive.
             if (!isLoggedIn) {
                 console.log('[EducationManager] Auto login...')
-                const loginSuccess = await window.api.erp.login({ id: 'dobong', password: '1010' })
+                const creds = await window.api.settings.getCredentials().catch(() => ({ id: '', password: '' }))
+                const loginSuccess = await window.api.erp.login({ id: creds.id, password: creds.password })
                 if (loginSuccess) {
                     setIsLoggedIn(true)
                     console.log('[EducationManager] Auto login successful')
                 } else {
-                    alert('자동 로그인 실패')
+                    alert('ERP 로그인 실패: 설정에서 아이디/비밀번호를 저장해주세요.')
                     setLoading(false)
                     return
                 }
             }
 
-            console.log('[EducationManager] Calling window.api.erp.getTodayEducation()')
-            const data = await window.api.erp.getTodayEducation()
+            console.log(`[EducationManager] Calling window.api.erp.getEducationByDate(${dateToFetch})`)
+            const data = await window.api.erp.getEducationByDate(dateToFetch)
             console.log('[EducationManager] Data received:', data)
             setStudents(data.students)
             setOperationTime(data.operationTime)
@@ -86,10 +74,29 @@ export function EducationManager() {
         }
     }
 
+    // Date navigation helpers
+    const changeDate = (days: number) => {
+        const current = new Date(selectedDate)
+        current.setDate(current.getDate() + days)
+        const newDate = current.toISOString().split('T')[0]
+        setSelectedDate(newDate)
+        setStudents([]) // Clear students when date changes
+        setSelectedId(null)
+        fetchData(newDate)
+    }
+
+    const goToToday = () => {
+        const today = new Date().toISOString().split('T')[0]
+        setSelectedDate(today)
+        setStudents([])
+        setSelectedId(null)
+        fetchData(today)
+    }
+
     // Initial Fetch on Mount (ONLY if empty)
     useEffect(() => {
         if (students.length === 0) {
-            fetchData()
+            fetchData(selectedDate)
         }
     }, [])
 
@@ -111,13 +118,144 @@ export function EducationManager() {
         }
     }
 
+    const ensureLoggedIn = async () => {
+        if (isLoggedIn) return true
+        const creds = await window.api.settings.getCredentials()
+        const ok = await window.api.erp.login({ id: creds.id, password: creds.password })
+        setIsLoggedIn(ok)
+        return ok
+    }
+
+    const initUpdateForm = () => {
+        if (!selectedStudent) return
+        const start = selectedStudent.time
+        const [h, m] = start.split(':').map(Number)
+        const endH = (h + (selectedStudent.duration || 1)) % 24
+        const end = `${String(endH).padStart(2, '0')}:${String(m || 0).padStart(2, '0')}`
+        setUpdateForm({ startTime: start, endTime: end, machine: '' })
+        setIsUpdatingReservation(true)
+    }
+
+    const refreshAfterReservationAction = async () => {
+        const data = await window.api.erp.getEducationByDate(selectedDate)
+        setStudents(data.students)
+    }
+
+    const handleReservationCancel = async () => {
+        if (!selectedStudent) return
+        if (!confirm('예약을 취소(삭제)하시겠습니까?')) return
+        setLoading(true)
+        try {
+            if (!(await ensureLoggedIn())) {
+                alert('ERP 로그인 실패')
+                return
+            }
+            const ok = await window.api.erp.cancelReservation(selectedStudent.id, selectedDate)
+            if (!ok) {
+                alert('예약 취소 실패')
+                return
+            }
+            await refreshAfterReservationAction()
+            alert('예약이 취소(삭제)되었습니다.')
+        } catch (e) {
+            console.error(e)
+            alert('오류 발생')
+        } finally {
+            setLoading(false)
+        }
+    }
+
+    const handleReservationAbsent = async () => {
+        if (!selectedStudent) return
+        if (!confirm('결석 처리하시겠습니까?')) return
+        setLoading(true)
+        try {
+            if (!(await ensureLoggedIn())) {
+                alert('ERP 로그인 실패')
+                return
+            }
+            const ok = await window.api.erp.markAbsent(selectedStudent.id, selectedDate)
+            if (!ok) {
+                alert('결석 처리 실패')
+                return
+            }
+            await refreshAfterReservationAction()
+            alert('결석 처리되었습니다.')
+        } catch (e) {
+            console.error(e)
+            alert('오류 발생')
+        } finally {
+            setLoading(false)
+        }
+    }
+
+    const handleReservationUnmarkAbsent = async () => {
+        if (!selectedStudent) return
+        if (!confirm('결석 처리를 취소하시겠습니까?')) return
+        setLoading(true)
+        try {
+            if (!(await ensureLoggedIn())) {
+                alert('ERP 로그인 실패')
+                return
+            }
+            const ok = await window.api.erp.unmarkAbsent(selectedStudent.id, selectedDate)
+            if (!ok) {
+                alert('결석 취소 실패')
+                return
+            }
+            await refreshAfterReservationAction()
+            alert('결석 처리가 취소되었습니다.')
+        } catch (e) {
+            console.error(e)
+            alert('오류 발생')
+        } finally {
+            setLoading(false)
+        }
+    }
+
+    const handleUpdateSubmit = async () => {
+        if (!selectedStudent) return
+        if (!updateForm.startTime || !updateForm.endTime) {
+            alert('시작/종료 시간을 입력하세요.')
+            return
+        }
+
+        setLoading(true)
+        try {
+            if (!(await ensureLoggedIn())) {
+                alert('ERP 로그인 실패')
+                return
+            }
+
+            const updates = {
+                startTime: updateForm.startTime,
+                endTime: updateForm.endTime,
+                machineValue: updateForm.machine ? updateForm.machine : undefined
+            }
+
+            const ok = await window.api.erp.updateReservation(selectedStudent.id, selectedDate, updates)
+            if (!ok) {
+                alert('예약 수정 실패')
+                return
+            }
+
+            setIsUpdatingReservation(false)
+            await refreshAfterReservationAction()
+            alert('예약이 수정되었습니다.')
+        } catch (e) {
+            console.error(e)
+            alert('오류 발생')
+        } finally {
+            setLoading(false)
+        }
+    }
+
     const handleAddHistory = () => {
         if (!selectedId || !selectedStudent) return
 
-        const today = new Date().toISOString().split('T')[0]
         const newItem = {
             id: Date.now().toString(), // Temporary ID for React key
-            date: today,
+            date: selectedDate,
             content: `${selectedStudent.duration}/ `
         }
 
@@ -173,7 +311,7 @@ export function EducationManager() {
             setPendingHistory({})
 
             // Refresh Data
-            const data = await window.api.erp.getTodayEducation()
+            const data = await window.api.erp.getEducationByDate(selectedDate)
             setStudents(data.students)
 
             alert('전송 완료되었습니다.')
@@ -193,7 +331,7 @@ export function EducationManager() {
             if (success) {
                 alert('삭제되었습니다.')
                 // Force refresh to ensure data is in sync, store will update via setStudents inside fetchData
-                const data = await window.api.erp.getTodayEducation()
+                const data = await window.api.erp.getEducationByDate(selectedDate)
                 setStudents(data.students)
             } else {
                 alert('삭제 실패')
@@ -217,7 +355,7 @@ export function EducationManager() {
                 alert('수정되었습니다.')
                 setEditingHistory(null)
                 // Force refresh
-                const data = await window.api.erp.getTodayEducation()
+                const data = await window.api.erp.getEducationByDate(selectedDate)
                 setStudents(data.students)
             } else {
                 alert('수정 실패')
@@ -230,41 +368,88 @@ export function EducationManager() {
         }
     }
 
+
     return (
         <div className="flex flex-col h-full bg-gray-100">
             {/* Header */}
-            <div className="bg-white border-b border-gray-200 p-4 flex justify-between items-center">
-                <div className="flex items-center space-x-4">
-                    <h2 className="text-xl font-bold text-gray-800">교육 관리</h2>
-                    <span className="text-blue-600 font-bold">{operationTime}</span>
-                    <span className="text-sm text-gray-500">{loading ? '작업 중...' : isLoggedIn ? '온라인' : '오프라인'}</span>
+            <div className="bg-white border-b border-gray-200 p-4">
+                <div className="flex justify-between items-center">
+                    <div className="flex items-center space-x-4">
+                        <h2 className="text-xl font-bold text-gray-800">교육일지</h2>
+                        <span className="text-sm text-gray-500">{loading ? '작업 중...' : isLoggedIn ? '온라인' : '오프라인'}</span>
+                    </div>
+                    <div className="flex items-center space-x-3">
+                        <label className="flex items-center space-x-2 text-sm text-gray-600 cursor-pointer">
+                            <input
+                                type="checkbox"
+                                checked={showBrowser}
+                                onChange={e => setShowBrowser(e.target.checked)}
+                                className="rounded text-blue-600"
+                            />
+                            <span>브라우저 표시</span>
+                        </label>
+                        <button
+                            onClick={() => fetchData()}
+                            disabled={loading}
+                            className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                        >
+                            <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
+                            <span>새로고침</span>
+                        </button>
+                        <button
+                            onClick={handleSendAll}
+                            disabled={loading}
+                            className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
+                        >
+                            <Send size={16} />
+                            <span>일괄 전송</span>
+                        </button>
+                    </div>
                 </div>
-                <div className="flex items-center space-x-3">
-                    <label className="flex items-center space-x-2 text-sm text-gray-600 cursor-pointer">
+                {/* Date Selector */}
+                <div className="flex items-center space-x-3 mt-3 pt-3 border-t border-gray-100">
+                    <div className="flex items-center space-x-1">
+                        <button
+                            onClick={() => changeDate(-1)}
+                            disabled={loading}
+                            className="p-2 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50"
+                            title="이전 날"
+                        >
+                            <ChevronLeft size={20} className="text-gray-600" />
+                        </button>
                         <input
-                            type="checkbox"
-                            checked={showBrowser}
-                            onChange={e => setShowBrowser(e.target.checked)}
-                            className="rounded text-blue-600"
+                            type="date"
+                            value={selectedDate}
+                            onChange={(e) => {
+                                const newDate = e.target.value
+                                setSelectedDate(newDate)
+                                setStudents([])
+                                setSelectedId(null)
+                                fetchData(newDate)
+                            }}
+                            disabled={loading}
+                            className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
                         />
-                        <span>브라우저 표시</span>
-                    </label>
+                        <button
+                            onClick={() => changeDate(1)}
+                            disabled={loading}
+                            className="p-2 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50"
+                            title="다음 날"
+                        >
+                            <ChevronRight size={20} className="text-gray-600" />
+                        </button>
+                    </div>
                     <button
-                        onClick={fetchData}
+                        onClick={goToToday}
                         disabled={loading}
-                        className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                        className="flex items-center space-x-2 px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 disabled:opacity-50 transition-colors"
                     >
-                        <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
-                        <span>새로고침</span>
+                        <Calendar size={16} />
+                        <span>오늘</span>
                     </button>
-                    <button
-                        onClick={handleSendAll}
-                        disabled={loading}
-                        className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
-                    >
-                        <Send size={16} />
-                        <span>일괄 전송</span>
-                    </button>
+                    {operationTime && (
+                        <span className="text-blue-600 font-bold ml-2">운영 시간: {operationTime}</span>
+                    )}
                 </div>
             </div>
 
@@ -292,7 +477,7 @@ export function EducationManager() {
                                         <div className="flex items-center space-x-3">
                                             <div className={cn(
                                                 "w-3 h-3 rounded-full",
-                                                (student.status === 'done' || hasTodayEducation(student)) ? "bg-green-500" : "bg-yellow-500"
+                                                (student.status === 'done' || hasEducationOnDate(student, selectedDate)) ? "bg-green-500" : "bg-yellow-500"
                                             )} />
                                             <span className="font-medium text-gray-900">{student.name}</span>
                                         </div>
@@ -329,7 +514,102 @@ export function EducationManager() {
                                         {selectedStudent.generalMemo}
                                     </div>
                                 )}
+
+                                {/* Reservation Actions */}
+                                <div className="mt-6 pt-6 border-t border-gray-100">
+                                    <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">예약 관리</h4>
+                                    <div className="flex flex-wrap gap-2">
+                                        <button
+                                            onClick={initUpdateForm}
+                                            disabled={loading}
+                                            className="flex items-center space-x-1 px-3 py-2 bg-white border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 hover:border-gray-300 transition-colors text-sm"
+                                        >
+                                            <Clock size={16} className="text-blue-500" />
+                                            <span>시간/기기 변경</span>
+                                        </button>
+                                        <button
+                                            onClick={handleReservationAbsent}
+                                            disabled={loading}
+                                            className="flex items-center space-x-1 px-3 py-2 bg-white border border-gray-200 text-gray-700 rounded-lg hover:bg-orange-50 hover:border-orange-200 hover:text-orange-700 transition-colors text-sm"
+                                        >
+                                            <UserX size={16} className="text-orange-500" />
+                                            <span>결석 처리</span>
+                                        </button>
+                                        <button
+                                            onClick={handleReservationUnmarkAbsent}
+                                            disabled={loading}
+                                            className="flex items-center space-x-1 px-3 py-2 bg-white border border-gray-200 text-gray-700 rounded-lg hover:bg-green-50 hover:border-green-200 hover:text-green-700 transition-colors text-sm"
+                                        >
+                                            <UserCheck size={16} className="text-green-500" />
+                                            <span>결석 취소</span>
+                                        </button>
+                                        <button
+                                            onClick={handleReservationCancel}
+                                            disabled={loading}
+                                            className="flex items-center space-x-1 px-3 py-2 bg-white border border-gray-200 text-gray-700 rounded-lg hover:bg-red-50 hover:border-red-200 hover:text-red-700 transition-colors text-sm ml-auto"
+                                        >
+                                            <Ban size={16} className="text-red-500" />
+                                            <span>예약 취소(삭제)</span>
+                                        </button>
+                                    </div>
+
+                                    {isUpdatingReservation && (
+                                        <div className="mt-4 p-4 bg-gray-50 rounded-lg border border-gray-200 animate-in slide-in-from-top-2">
+                                            <div className="flex justify-between items-center mb-3">
+                                                <span className="text-sm font-bold text-gray-700">예약 정보 수정</span>
+                                                <button onClick={() => setIsUpdatingReservation(false)} className="text-gray-400 hover:text-gray-600">
+                                                    <X size={16} />
+                                                </button>
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-3 mb-3">
+                                                <div>
+                                                    <label className="block text-xs text-gray-500 mb-1">시작 시간</label>
+                                                    <input
+                                                        type="time"
+                                                        value={updateForm.startTime}
+                                                        onChange={e => setUpdateForm({ ...updateForm, startTime: e.target.value })}
+                                                        className="w-full text-sm border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-xs text-gray-500 mb-1">종료 시간</label>
+                                                    <input
+                                                        type="time"
+                                                        value={updateForm.endTime}
+                                                        onChange={e => setUpdateForm({ ...updateForm, endTime: e.target.value })}
+                                                        className="w-full text-sm border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                                                    />
+                                                </div>
+                                            </div>
+                                            <div className="mb-3">
+                                                <label className="block text-xs text-gray-500 mb-1">기기 (선택)</label>
+                                                <input
+                                                    type="text"
+                                                    value={updateForm.machine}
+                                                    onChange={e => setUpdateForm({ ...updateForm, machine: e.target.value })}
+                                                    placeholder="기기명 입력"
+                                                    className="w-full text-sm border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+                                                />
+                                            </div>
+                                            <div className="flex justify-end space-x-2">
+                                                <button
+                                                    onClick={() => setIsUpdatingReservation(false)}
+                                                    className="px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-200 rounded"
+                                                >
+                                                    취소
+                                                </button>
+                                                <button
+                                                    onClick={handleUpdateSubmit}
+                                                    className="px-3 py-1.5 text-xs bg-blue-600 text-white hover:bg-blue-700 rounded shadow-sm"
+                                                >
+                                                    수정 완료
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
                             </div>
+
 
                             {/* History List */}
                             <div className="space-y-4 mb-6">
@@ -432,6 +712,6 @@ export function EducationManager() {
                     )}
                 </div>
             </div>
-        </div>
+        </div >
     )
 }
