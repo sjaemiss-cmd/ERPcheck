@@ -1756,54 +1756,67 @@ export class ErpService {
     }
 
     private async fetchBookingInfoHtml(eventId: string): Promise<string> {
-        if (!this.page) return ''
+        if (!this.page) {
+            console.log('[fetchBookingInfoHtml] No page available, returning empty')
+            return ''
+        }
         const page = this.page
         const context = page.context()
 
-        const response = await context.request.post('http://sook0517.cafe24.com/index.php/dataFunction/getBookingInfo', {
-            headers: {
-                'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-                'Referer': 'http://sook0517.cafe24.com/index/calender',
-                'Origin': 'http://sook0517.cafe24.com',
-                'X-Requested-With': 'XMLHttpRequest',
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-            },
-            form: { idx: eventId, branch_idx: 4 }
-        })
-
-        const buffer = await response.body()
-        const decodedBody = iconv.decode(buffer as Buffer, 'euc-kr')
+        console.log(`[fetchBookingInfoHtml] Fetching booking info for eventId: ${eventId}`)
 
         try {
-            const jsonResponse = JSON.parse(decodedBody)
+            const response = await context.request.post('http://sook0517.cafe24.com/index.php/dataFunction/getBookingInfo', {
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+                    'Referer': 'http://sook0517.cafe24.com/index/calender',
+                    'Origin': 'http://sook0517.cafe24.com',
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+                },
+                form: { idx: eventId, branch_idx: 4 }
+            })
 
-            // Case 1) Modern ERP returns JSON fields directly (no HTML)
-            const idCandidate = (() => {
-                const v = (jsonResponse as any)?.ID ?? (jsonResponse as any)?.machine_info_idx ?? (jsonResponse as any)?.MACHINE
-                if (v == null) return ''
-                // ERP may return number or string
-                return typeof v === 'string' || typeof v === 'number' ? String(v) : ''
-            })()
+            const buffer = await response.body()
+            const decodedBody = iconv.decode(buffer as Buffer, 'euc-kr')
+            console.log(`[fetchBookingInfoHtml] Response length: ${decodedBody.length}`)
 
-            const parsedFromId = idCandidate ? this.parseDobongResourceIdFromMachineToken(String(idCandidate)) : null
-            if (parsedFromId) {
-                // Build a tiny HTML snippet so downstream cheerio parsing still works.
-                return `<select id="insMachine" name="machine_info_idx"><option value="${String(idCandidate)}" selected>dobong</option></select>`
+            try {
+                const jsonResponse = JSON.parse(decodedBody)
+
+                // Case 1) Modern ERP returns JSON fields directly (no HTML)
+                const idCandidate = (() => {
+                    const v = (jsonResponse as any)?.ID ?? (jsonResponse as any)?.machine_info_idx ?? (jsonResponse as any)?.MACHINE
+                    if (v == null) return ''
+                    // ERP may return number or string
+                    return typeof v === 'string' || typeof v === 'number' ? String(v) : ''
+                })()
+
+                console.log(`[fetchBookingInfoHtml] ID candidate: ${idCandidate}`)
+
+                const parsedFromId = idCandidate ? this.parseDobongResourceIdFromMachineToken(String(idCandidate)) : null
+                if (parsedFromId) {
+                    // Build a tiny HTML snippet so downstream cheerio parsing still works.
+                    return `<select id="insMachine" name="machine_info_idx"><option value="${String(idCandidate)}" selected>dobong</option></select>`
+                }
+
+                // Case 2) ERP sometimes returns JSON with embedded HTML in some string fields.
+                const stringValues = Object.values(jsonResponse).filter((v): v is string => typeof v === 'string')
+                const htmlCandidate = stringValues.find(v => /<select\b/i.test(v) || /\binsMachine\b/i.test(v) || /\bmachine_info_idx\b/i.test(v))
+                if (htmlCandidate && htmlCandidate.trim()) return htmlCandidate
+
+                // Case 3) Fallback to MEMO (may contain HTML in older versions)
+                const memo = typeof (jsonResponse as any)?.MEMO === 'string' ? (jsonResponse as any).MEMO : ''
+                if (memo && memo.trim()) return memo
+
+                // Otherwise, return raw JSON string (debug)
+                return decodedBody
+            } catch {
+                return decodedBody
             }
-
-            // Case 2) ERP sometimes returns JSON with embedded HTML in some string fields.
-            const stringValues = Object.values(jsonResponse).filter((v): v is string => typeof v === 'string')
-            const htmlCandidate = stringValues.find(v => /<select\b/i.test(v) || /\binsMachine\b/i.test(v) || /\bmachine_info_idx\b/i.test(v))
-            if (htmlCandidate && htmlCandidate.trim()) return htmlCandidate
-
-            // Case 3) Fallback to MEMO (may contain HTML in older versions)
-            const memo = typeof (jsonResponse as any)?.MEMO === 'string' ? (jsonResponse as any).MEMO : ''
-            if (memo && memo.trim()) return memo
-
-            // Otherwise, return raw JSON string (debug)
-            return decodedBody
-        } catch {
-            return decodedBody
+        } catch (err) {
+            console.error(`[fetchBookingInfoHtml] Request failed for eventId ${eventId}:`, err)
+            return ''
         }
     }
 
@@ -1884,6 +1897,7 @@ export class ErpService {
         }
 
         const events = await this.getResourceSchedule(startDate, endDate)
+        console.log(`[fetchWeeklyReservationItems] Fetched ${events.length} events from ${startDate} to ${endDate}`)
 
         const start = new Date(`${startDate}T00:00:00`)
         const end = new Date(`${endDate}T23:59:59`)
@@ -1915,6 +1929,12 @@ export class ErpService {
 
             try {
                 const html = await this.fetchBookingInfoHtml(String(e.id))
+                console.log(`[fetchWeeklyReservationItems] HTML length for ${e.id}: ${html.length}`)
+
+                if (!html || html.length === 0) {
+                    console.warn(`[fetchWeeklyReservationItems] Empty HTML for event ${e.id}`)
+                }
+
                 const $ = cheerio.load(html)
 
                 // Prefer explicit JSON field "ID" if present (ERP returns dobong-1..9).
@@ -1960,6 +1980,8 @@ export class ErpService {
 
             const name = this.sanitizeNameFromTitle(title)
             const status = this.parseStatusFromClassName(e.className)
+
+            console.log(`[fetchWeeklyReservationItems] Processed event ${e.id}: name=${name}, phone=${phone}, resourceId=${resourceId}`)
 
             const entry: WeeklyReservationDetail = {
                 id: String(e.id),

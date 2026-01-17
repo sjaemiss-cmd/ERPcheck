@@ -389,7 +389,10 @@ export function EducationManager() {
                             <span>브라우저 표시</span>
                         </label>
                         <button
-                            onClick={() => fetchData()}
+                            onClick={() => {
+                                console.log('[EducationManager] Refresh button clicked, loading:', loading)
+                                fetchData()
+                            }}
                             disabled={loading}
                             className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
                         >

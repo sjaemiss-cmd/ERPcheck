@@ -51,5 +51,9 @@ electron.contextBridge.exposeInMainWorld("api", {
     kakaoLogin: () => electron.ipcRenderer.invoke("scraper:kakaoLogin"),
     getNaverBookings: () => electron.ipcRenderer.invoke("scraper:getNaverBookings"),
     getKakaoBookings: () => electron.ipcRenderer.invoke("scraper:getKakaoBookings")
+  },
+  settings: {
+    getCredentials: () => electron.ipcRenderer.invoke("settings:getCredentials"),
+    saveCredentials: (id, password) => electron.ipcRenderer.invoke("settings:saveCredentials", { id, password })
   }
 });

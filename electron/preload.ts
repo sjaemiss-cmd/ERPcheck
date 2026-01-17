@@ -61,5 +61,9 @@ contextBridge.exposeInMainWorld('api', {
         getNaverBookings: () => ipcRenderer.invoke('scraper:getNaverBookings'),
         getKakaoBookings: () => ipcRenderer.invoke('scraper:getKakaoBookings'),
     },
+    settings: {
+        getCredentials: () => ipcRenderer.invoke('settings:getCredentials'),
+        saveCredentials: (id: string, password: string) => ipcRenderer.invoke('settings:saveCredentials', { id, password }),
+    },
 
 })

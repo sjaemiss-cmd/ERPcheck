@@ -26374,40 +26374,51 @@ class ErpService {
     return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
   }
   async fetchBookingInfoHtml(eventId) {
-    if (!this.page) return "";
+    if (!this.page) {
+      console.log("[fetchBookingInfoHtml] No page available, returning empty");
+      return "";
+    }
     const page = this.page;
     const context = page.context();
-    const response = await context.request.post("http://sook0517.cafe24.com/index.php/dataFunction/getBookingInfo", {
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-        "Referer": "http://sook0517.cafe24.com/index/calender",
-        "Origin": "http://sook0517.cafe24.com",
-        "X-Requested-With": "XMLHttpRequest",
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-      },
-      form: { idx: eventId, branch_idx: 4 }
-    });
-    const buffer2 = await response.body();
-    const decodedBody = iconv.decode(buffer2, "euc-kr");
+    console.log(`[fetchBookingInfoHtml] Fetching booking info for eventId: ${eventId}`);
     try {
-      const jsonResponse = JSON.parse(decodedBody);
-      const idCandidate = (() => {
-        const v = (jsonResponse == null ? void 0 : jsonResponse.ID) ?? (jsonResponse == null ? void 0 : jsonResponse.machine_info_idx) ?? (jsonResponse == null ? void 0 : jsonResponse.MACHINE);
-        if (v == null) return "";
-        return typeof v === "string" || typeof v === "number" ? String(v) : "";
-      })();
-      const parsedFromId = idCandidate ? this.parseDobongResourceIdFromMachineToken(String(idCandidate)) : null;
-      if (parsedFromId) {
-        return `<select id="insMachine" name="machine_info_idx"><option value="${String(idCandidate)}" selected>dobong</option></select>`;
+      const response = await context.request.post("http://sook0517.cafe24.com/index.php/dataFunction/getBookingInfo", {
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+          "Referer": "http://sook0517.cafe24.com/index/calender",
+          "Origin": "http://sook0517.cafe24.com",
+          "X-Requested-With": "XMLHttpRequest",
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        },
+        form: { idx: eventId, branch_idx: 4 }
+      });
+      const buffer2 = await response.body();
+      const decodedBody = iconv.decode(buffer2, "euc-kr");
+      console.log(`[fetchBookingInfoHtml] Response length: ${decodedBody.length}`);
+      try {
+        const jsonResponse = JSON.parse(decodedBody);
+        const idCandidate = (() => {
+          const v = (jsonResponse == null ? void 0 : jsonResponse.ID) ?? (jsonResponse == null ? void 0 : jsonResponse.machine_info_idx) ?? (jsonResponse == null ? void 0 : jsonResponse.MACHINE);
+          if (v == null) return "";
+          return typeof v === "string" || typeof v === "number" ? String(v) : "";
+        })();
+        console.log(`[fetchBookingInfoHtml] ID candidate: ${idCandidate}`);
+        const parsedFromId = idCandidate ? this.parseDobongResourceIdFromMachineToken(String(idCandidate)) : null;
+        if (parsedFromId) {
+          return `<select id="insMachine" name="machine_info_idx"><option value="${String(idCandidate)}" selected>dobong</option></select>`;
+        }
+        const stringValues = Object.values(jsonResponse).filter((v) => typeof v === "string");
+        const htmlCandidate = stringValues.find((v) => /<select\b/i.test(v) || /\binsMachine\b/i.test(v) || /\bmachine_info_idx\b/i.test(v));
+        if (htmlCandidate && htmlCandidate.trim()) return htmlCandidate;
+        const memo = typeof (jsonResponse == null ? void 0 : jsonResponse.MEMO) === "string" ? jsonResponse.MEMO : "";
+        if (memo && memo.trim()) return memo;
+        return decodedBody;
+      } catch {
+        return decodedBody;
       }
-      const stringValues = Object.values(jsonResponse).filter((v) => typeof v === "string");
-      const htmlCandidate = stringValues.find((v) => /<select\b/i.test(v) || /\binsMachine\b/i.test(v) || /\bmachine_info_idx\b/i.test(v));
-      if (htmlCandidate && htmlCandidate.trim()) return htmlCandidate;
-      const memo = typeof (jsonResponse == null ? void 0 : jsonResponse.MEMO) === "string" ? jsonResponse.MEMO : "";
-      if (memo && memo.trim()) return memo;
-      return decodedBody;
-    } catch {
-      return decodedBody;
+    } catch (err) {
+      console.error(`[fetchBookingInfoHtml] Request failed for eventId ${eventId}:`, err);
+      return "";
     }
   }
   summarizeSelectElements($2) {
@@ -26467,6 +26478,7 @@ class ErpService {
       throw new Error("ERP page not initialized");
     }
     const events = await this.getResourceSchedule(startDate, endDate);
+    console.log(`[fetchWeeklyReservationItems] Fetched ${events.length} events from ${startDate} to ${endDate}`);
     const start = /* @__PURE__ */ new Date(`${startDate}T00:00:00`);
     const end2 = /* @__PURE__ */ new Date(`${endDate}T23:59:59`);
     if (Number.isNaN(start.getTime()) || Number.isNaN(end2.getTime())) {
@@ -26489,6 +26501,10 @@ class ErpService {
       let phone = null;
       try {
         const html2 = await this.fetchBookingInfoHtml(String(e.id));
+        console.log(`[fetchWeeklyReservationItems] HTML length for ${e.id}: ${html2.length}`);
+        if (!html2 || html2.length === 0) {
+          console.warn(`[fetchWeeklyReservationItems] Empty HTML for event ${e.id}`);
+        }
         const $2 = load(html2);
         const bookingJsonId = (() => {
           try {
@@ -26517,6 +26533,7 @@ class ErpService {
       }
       const name = this.sanitizeNameFromTitle(title2);
       const status = this.parseStatusFromClassName(e.className);
+      console.log(`[fetchWeeklyReservationItems] Processed event ${e.id}: name=${name}, phone=${phone}, resourceId=${resourceId}`);
       const entry = {
         id: String(e.id),
         title: title2,
@@ -42094,8 +42111,10 @@ function createWindow() {
   });
   if (process.env.NODE_ENV === "development" || !require$$1$2.app.isPackaged) {
     mainWindow.loadURL("http://localhost:5173");
+    mainWindow.webContents.openDevTools();
   } else {
     mainWindow.loadFile(require$$0$1.join(__dirname, "../dist/index.html"));
+    mainWindow.webContents.openDevTools();
   }
 }
 require$$1$2.app.whenReady().then(async () => {
@@ -42120,6 +42139,17 @@ require$$1$2.ipcMain.handle("member:list", () => {
 });
 require$$1$2.ipcMain.handle("member:save", (_, members) => {
   store.set("members", members);
+  return true;
+});
+require$$1$2.ipcMain.handle("settings:getCredentials", () => {
+  return {
+    id: store.get("erp.id", ""),
+    password: store.get("erp.password", "")
+  };
+});
+require$$1$2.ipcMain.handle("settings:saveCredentials", (_, { id: id2, password }) => {
+  store.set("erp.id", id2);
+  store.set("erp.password", password);
   return true;
 });
 require$$1$2.ipcMain.removeHandler("erp:login");

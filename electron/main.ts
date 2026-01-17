@@ -120,9 +120,10 @@ function createWindow() {
 
     if (process.env.NODE_ENV === 'development' || !app.isPackaged) {
         mainWindow.loadURL('http://localhost:5173')
-        // mainWindow.webContents.openDevTools()
+        mainWindow.webContents.openDevTools()
     } else {
         mainWindow.loadFile(path.join(__dirname, '../dist/index.html'))
+        mainWindow.webContents.openDevTools()
     }
 }
 
@@ -154,6 +155,20 @@ ipcMain.handle('member:list', () => {
 
 ipcMain.handle('member:save', (_, members) => {
     store.set('members', members)
+    return true
+})
+
+// Settings
+ipcMain.handle('settings:getCredentials', () => {
+    return {
+        id: store.get('erp.id', '') as string,
+        password: store.get('erp.password', '') as string
+    }
+})
+
+ipcMain.handle('settings:saveCredentials', (_, { id, password }) => {
+    store.set('erp.id', id)
+    store.set('erp.password', password)
     return true
 })
 

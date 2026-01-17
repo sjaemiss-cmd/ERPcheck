@@ -102,6 +102,7 @@ export function WeeklyResourceTimeGrid({ className, isActive = true }: WeeklyRes
     const [detailsError, setDetailsError] = useState<string | null>(null)
 
     const fetchDetails = async (forceRefresh: boolean = false) => {
+        console.log('[WeeklyResourceTimeGrid] fetchDetails called', { startDate, endDate, forceRefresh })
         setDetailsLoading(true)
         setDetailsError(null)
         try {
@@ -110,10 +111,11 @@ export function WeeklyResourceTimeGrid({ className, isActive = true }: WeeklyRes
                 endDate,
                 { refresh: forceRefresh }
             )
+            console.log('[WeeklyResourceTimeGrid] fetchDetails result:', res)
             setDetails(res.items || [])
             setDetailsMeta({ fetchedAt: res.fetchedAt, fromCache: res.fromCache })
         } catch (err) {
-            console.error('Failed to fetch weekly reservation details:', err)
+            console.error('[WeeklyResourceTimeGrid] Failed to fetch weekly reservation details:', err)
             setDetailsError('예약 상세를 불러오지 못했습니다.')
         } finally {
             setDetailsLoading(false)
@@ -151,7 +153,9 @@ export function WeeklyResourceTimeGrid({ className, isActive = true }: WeeklyRes
     }
 
     const buildEventsFromDetails = (items: WeeklyReservationDetail[]): ResourceTimeGridEvent[] => {
+        console.log('[buildEventsFromDetails] Building events from', items.length, 'items')
         const result: ResourceTimeGridEvent[] = []
+        const resourceIdCounts: Record<string, number> = {}
 
         for (const it of items) {
             if (!it.startTime) continue
@@ -167,14 +171,21 @@ export function WeeklyResourceTimeGrid({ className, isActive = true }: WeeklyRes
                 end = new Date(start.getTime() + 60 * 60 * 1000)
             }
 
-            const isOperatingTime = it.title.includes('class="text_red"')
+            const cleanTitle = stripHtml(it.title || it.name || '')
+            const isOperatingTime = cleanTitle === '운영' || cleanTitle.includes('운영')
+
             let resourceId = it.resourceId || 'unassigned'
-            // Map operating events to 'operating' column (even if not recognized in other title fields)
+
+            // Log first few items for debugging
+            if (result.length < 5) {
+                console.log('[buildEventsFromDetails] Item:', { id: it.id, title: it.title, cleanTitle, resourceId: it.resourceId, isOperatingTime })
+            }
+
+            // Map operating events to 'operating' column
             if (isOperatingTime) {
                 resourceId = 'operating'
             } else {
                 // For non-operating events, only show if there's an explicit resourceId mapping to our grid
-                // Don't default to 'unassigned' unless it's truly unmapped
                 if (!resourceId || !RESOURCE_IDS.includes(resourceId)) {
                     resourceId = 'unassigned'
                 }
@@ -184,7 +195,8 @@ export function WeeklyResourceTimeGrid({ className, isActive = true }: WeeklyRes
                 resourceId = 'unassigned'
             }
 
-            const cleanTitle = stripHtml(it.title || it.name || '')
+            // Count resourceIds
+            resourceIdCounts[resourceId] = (resourceIdCounts[resourceId] || 0) + 1
 
             result.push({
                 id: it.id,
@@ -197,17 +209,22 @@ export function WeeklyResourceTimeGrid({ className, isActive = true }: WeeklyRes
             })
         }
 
+        console.log('[buildEventsFromDetails] Built', result.length, 'events')
+        console.log('[buildEventsFromDetails] ResourceId distribution:', resourceIdCounts)
         return result
     }
 
     // Fetch data
     useEffect(() => {
         const fetchSchedule = async () => {
+            console.log('[WeeklyResourceTimeGrid] fetchSchedule called', { startDate, endDate })
             setLoading(true)
             try {
                 const raw: (ErpScheduleEventRaw & { resourceId?: string | null })[] = window.api.erp.getResourceSchedule
                     ? await window.api.erp.getResourceSchedule(startDate, endDate)
                     : await window.api.erp.getSchedule(startDate, endDate)
+
+                console.log('[WeeklyResourceTimeGrid] Fetched raw events:', raw.length)
 
                 const normalized = normalizeScheduleEvents(raw as ErpScheduleEventRaw[], new Set(days), 'unassigned')
 
@@ -235,6 +252,7 @@ export function WeeklyResourceTimeGrid({ className, isActive = true }: WeeklyRes
 
                 try {
                     // Fallback: fetch details (ERP has machine assignment info for seats)
+                    console.log('[WeeklyResourceTimeGrid] Fetching weekly reservation details as fallback')
                     const detailsRes: WeeklyReservationDetailsResult = await window.api.erp.getWeeklyReservationDetails(
                         startDate,
                         endDate,
@@ -250,11 +268,12 @@ export function WeeklyResourceTimeGrid({ className, isActive = true }: WeeklyRes
 
                     setEvents(Array.from(merged.values()))
                 } catch (e) {
+                    console.error('[WeeklyResourceTimeGrid] Fallback details fetch failed:', e)
                     // If details fetch fails, show schedule data as best-effort.
                     setEvents(remapped)
                 }
             } catch (err) {
-                console.error('Failed to fetch schedule:', err)
+                console.error('[WeeklyResourceTimeGrid] Failed to fetch schedule:', err)
             } finally {
                 setLoading(false)
             }
