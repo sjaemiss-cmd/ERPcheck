@@ -1,9 +1,9 @@
-import { Home, BookOpen, Calendar, Settings } from 'lucide-react'
+import { Home, BookOpen, Calendar, PenTool, Settings } from 'lucide-react'
 import logo from '../../assets/logo.png'
 
 interface SidebarProps {
-    currentTab: 'dashboard' | 'education' | 'reservation' | 'settings'
-    onTabChange: (tab: 'dashboard' | 'education' | 'reservation' | 'settings') => void
+    currentTab: 'dashboard' | 'education' | 'reservation' | 'signature' | 'settings'
+    onTabChange: (tab: 'dashboard' | 'education' | 'reservation' | 'signature' | 'settings') => void
 }
 
 export function Sidebar({ currentTab, onTabChange }: SidebarProps) {
@@ -11,16 +11,14 @@ export function Sidebar({ currentTab, onTabChange }: SidebarProps) {
         { id: 'dashboard' as const, label: '대시보드', icon: Home },
         { id: 'education' as const, label: '교육일지', icon: BookOpen },
         { id: 'reservation' as const, label: '예약 수집', icon: Calendar },
+        { id: 'signature' as const, label: '전자서명', icon: PenTool },
         { id: 'settings' as const, label: '설정', icon: Settings },
     ]
 
     return (
         <div className="w-64 bg-slate-800 text-white flex flex-col">
-            <div className="p-4 border-b border-slate-700 flex items-center gap-3">
-                <img src={logo} alt="Logo" className="w-10 h-10 object-contain" />
-                <div>
-                    <h1 className="text-lg font-bold leading-tight">Operation<br />Master</h1>
-                </div>
+            <div className="p-4 border-b border-slate-700 flex items-center justify-center">
+                <img src={logo} alt="Logo" className="h-12 object-contain" />
             </div>
             <nav className="flex-1 p-4 space-y-2">
                 {menuItems.map(item => (

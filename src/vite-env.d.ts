@@ -33,7 +33,7 @@ interface Window {
             setHeadless: (headless: boolean) => Promise<boolean>
             fetchMembers: (options?: { months: number }) => Promise<boolean>
             registerToErp: (naverData: any) => Promise<boolean>
-            syncNaver: (dryRun: boolean) => Promise<any[]>
+            syncNaver: () => Promise<{ name: string; phone?: string; date?: string; startTime?: string; status: 'Success' | 'Failed' | 'Skipped'; ms: number }[]>
             cancelReservation: (id: string, date: string) => Promise<boolean>
             markAbsent: (id: string, date: string) => Promise<boolean>
             unmarkAbsent: (id: string, date: string) => Promise<boolean>
@@ -57,5 +57,58 @@ interface Window {
             saveCredentials: (creds: { id?: string; password?: string }) => Promise<boolean>
             getCredentials: () => Promise<{ id: string; password: string }>
         }
+        signature: {
+            getActiveForms: () => Promise<SignatureConsentForm[]>
+            getAllForms: () => Promise<(SignatureConsentForm & { version_count: number; signature_count: number })[]>
+            getFormById: (id: string) => Promise<SignatureConsentFormWithVersions | null>
+            createForm: (title: string, content: string) => Promise<SignatureConsentForm>
+            updateForm: (id: string, title: string, content: string) => Promise<void>
+            toggleFormActive: (id: string) => Promise<void>
+            deleteForm: (id: string) => Promise<{ error?: string }>
+            submit: (data: { formId: string; customerName: string; customerPhone: string; signatureData: string }) => Promise<{ success: boolean; error?: string }>
+            getById: (id: string) => Promise<SignatureDetailRecord | null>
+            search: (params: { query?: string; formId?: string; startDate?: string; endDate?: string; page?: number; limit?: number }) => Promise<{ signatures: SignatureRecord[]; total: number; totalPages: number }>
+            delete: (id: string) => Promise<void>
+            getStats: () => Promise<{ totalForms: number; totalSignatures: number; todaySignatures: number; recentSignatures: SignatureRecord[] }>
+        }
     }
+}
+
+interface SignatureConsentForm {
+    id: string
+    title: string
+    is_active: number
+    created_at: string
+    updated_at: string
+}
+
+interface SignatureFormVersion {
+    id: string
+    form_id: string
+    version_number: number
+    content: string
+    created_at: string
+}
+
+interface SignatureConsentFormWithVersions extends SignatureConsentForm {
+    versions: SignatureFormVersion[]
+    signature_count: number
+}
+
+interface SignatureRecord {
+    id: string
+    form_id: string
+    form_version_id: string
+    customer_name: string
+    customer_phone: string
+    signature_image: string
+    agreed_content: string
+    signed_at: string
+    ip_address: string | null
+    form_title?: string
+}
+
+interface SignatureDetailRecord extends SignatureRecord {
+    form_title: string
+    version_number: number
 }

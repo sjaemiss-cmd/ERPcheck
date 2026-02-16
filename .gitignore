@@ -47,3 +47,17 @@ debug_*.png
 Thumbs.db
 node_modules
 logs/
+
+# Browser session data
+browser_data/
+
+# Build output
+dist-electron/
+
+# Debug/temp files
+tsc_errors.txt
+_ul
+*.html.bak
+
+# Claude
+.claude/

@@ -43,7 +43,7 @@ contextBridge.exposeInMainWorld('api', {
         setHeadless: (headless: boolean) => ipcRenderer.invoke('erp:setHeadless', { headless }),
         fetchMembers: (options?: { months: number }) => ipcRenderer.invoke('erp:fetchMembers', options),
         registerToErp: (naverData: any) => ipcRenderer.invoke('erp:registerToErp', naverData),
-        syncNaver: (dryRun: boolean) => ipcRenderer.invoke('erp:syncNaver', { dryRun }),
+        syncNaver: () => ipcRenderer.invoke('erp:syncNaver'),
         cancelReservation: (id: string, date: string) => ipcRenderer.invoke('erp:cancelReservation', { id, date }),
         markAbsent: (id: string, date: string) => ipcRenderer.invoke('erp:markAbsent', { id, date }),
         unmarkAbsent: (id: string, date: string) => ipcRenderer.invoke('erp:unmarkAbsent', { id, date }),
@@ -65,5 +65,18 @@ contextBridge.exposeInMainWorld('api', {
         getCredentials: () => ipcRenderer.invoke('settings:getCredentials'),
         saveCredentials: (id: string, password: string) => ipcRenderer.invoke('settings:saveCredentials', { id, password }),
     },
-
+    signature: {
+        getActiveForms: () => ipcRenderer.invoke('signature:getActiveForms'),
+        getAllForms: () => ipcRenderer.invoke('signature:getAllForms'),
+        getFormById: (id: string) => ipcRenderer.invoke('signature:getFormById', { id }),
+        createForm: (title: string, content: string) => ipcRenderer.invoke('signature:createForm', { title, content }),
+        updateForm: (id: string, title: string, content: string) => ipcRenderer.invoke('signature:updateForm', { id, title, content }),
+        toggleFormActive: (id: string) => ipcRenderer.invoke('signature:toggleFormActive', { id }),
+        deleteForm: (id: string) => ipcRenderer.invoke('signature:deleteForm', { id }),
+        submit: (data: { formId: string; customerName: string; customerPhone: string; signatureData: string }) => ipcRenderer.invoke('signature:submit', data),
+        getById: (id: string) => ipcRenderer.invoke('signature:getById', { id }),
+        search: (params: { query?: string; formId?: string; startDate?: string; endDate?: string; page?: number; limit?: number }) => ipcRenderer.invoke('signature:search', params),
+        delete: (id: string) => ipcRenderer.invoke('signature:delete', { id }),
+        getStats: () => ipcRenderer.invoke('signature:getStats'),
+    },
 })

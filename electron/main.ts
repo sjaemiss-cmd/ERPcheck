@@ -3,8 +3,10 @@ import path from 'path'
 import dotenv from 'dotenv'
 import { ErpService } from './services/ErpService'
 import { ScraperService } from './services/scraperService'
+import { SignatureService } from './services/SignatureService'
 import Store from 'electron-store'
 import { Logger } from './utils/logger'
+import { normalizePhone } from './utils/phone'
 
 dotenv.config()
 
@@ -12,6 +14,7 @@ let mainWindow: BrowserWindow | null = null
 export const store = new Store()
 const erpService = new ErpService({ registerIpcHandlers: true })
 const scraperService = new ScraperService()
+const signatureService = new SignatureService()
 
 console.log('Services initialized:', erpService, scraperService)
 
@@ -217,9 +220,9 @@ ipcMain.handle('erp:registerToErp', async (_event, naverData) => {
     return await erpService.registerToErp(naverData)
 })
 
-ipcMain.handle('erp:syncNaver', async (_event, { dryRun }) => {
-    const syncTimer = Logger.startTimer(`erp:syncNaver dryRun=${dryRun}`)
-    console.log(`[Main] Starting Naver Sync (DryRun: ${dryRun})`)
+ipcMain.handle('erp:syncNaver', async () => {
+    const syncTimer = Logger.startTimer('erp:syncNaver')
+    console.log('[Main] Starting Naver Sync')
 
     // 0. Ensure ERP Login once (avoid per-item redirects)
     const id = store.get('erp.id', '') as string
@@ -240,28 +243,105 @@ ipcMain.handle('erp:syncNaver', async (_event, { dryRun }) => {
     const bookings = await scraperService.scrapeNaverReservations()
     Logger.endTimer('scraper:naver scrapeNaverReservations', scrapeTimer, { count: bookings.length })
 
-    const results: Array<{ name: string; status: string; dryRun: boolean; ms: number }> = []
+    // 2. Fetch ERP events with phone for duplicate detection
+    const today = new Date()
+    const twoWeeksLater = new Date(today.getTime() + 14 * 24 * 60 * 60 * 1000)
+    const sDate = today.toISOString().split('T')[0]
+    const eDate = twoWeeksLater.toISOString().split('T')[0]
 
-    // 2. Register (Sync)
+    let erpPhoneMap = new Map<string, Array<{ date: string; startTime: string | null; endTime: string | null }>>()
+    try {
+        const erpResult = await erpService.getWeeklyReservationDetails(sDate, eDate)
+        for (const item of erpResult.items) {
+            const np = normalizePhone(item.phone)
+            if (np) {
+                if (!erpPhoneMap.has(np)) erpPhoneMap.set(np, [])
+                erpPhoneMap.get(np)!.push({ date: item.date, startTime: item.startTime, endTime: item.endTime })
+            }
+        }
+        Logger.info('[Main] syncNaver ERP phone map built', { entries: erpPhoneMap.size, erpItems: erpResult.items.length })
+    } catch (err) {
+        Logger.warn('[Main] syncNaver failed to build ERP phone map, proceeding without dedup', { err })
+    }
+
+    const results: Array<{ name: string; phone?: string; date?: string; startTime?: string; status: 'Success' | 'Failed' | 'Skipped'; ms: number }> = []
+
+    // Helper: parse date/time from naver booking date_string
+    const parseNaverDate = (dateString: string): string | null => {
+        const m = dateString.match(/(\d{4})\.\s*(\d{1,2})\.\s*(\d{1,2})/)
+        return m ? `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}` : null
+    }
+    const parseNaverTime = (dateString: string): string | null => {
+        const timeMatch = dateString.match(/([오전후]+)\s*(\d{1,2}):(\d{2})/)
+        if (!timeMatch) return null
+        const [, ampm, hStr, mStr] = timeMatch
+        let h = parseInt(hStr)
+        if (ampm === '오후' && h < 12) h += 12
+        if (ampm === '오전' && h === 12) h = 0
+        return `${String(h).padStart(2, '0')}:${mStr}`
+    }
+
+    // 3. Register (with duplicate skip)
     for (const booking of bookings) {
+        const bookingPhone = normalizePhone(booking.user_phone)
+        const bookingDate = parseNaverDate(booking.date_string || '')
+        const bookingTime = parseNaverTime(booking.date_string || '')
+
+        if (bookingPhone && bookingDate && erpPhoneMap.has(bookingPhone)) {
+            const matches = erpPhoneMap.get(bookingPhone)!
+            const alreadyRegistered = matches.some(e => e.date === bookingDate)
+            if (alreadyRegistered) {
+                Logger.info('[Main] syncNaver SKIP (already registered)', {
+                    name: booking.user_name,
+                    phone: bookingPhone,
+                    date: bookingDate,
+                })
+                results.push({
+                    name: booking.user_name,
+                    phone: bookingPhone ?? undefined,
+                    date: bookingDate ?? undefined,
+                    startTime: bookingTime ?? undefined,
+                    status: 'Skipped',
+                    ms: 0,
+                })
+                continue
+            }
+        }
+
         const oneTimer = Date.now()
-        const success = await erpService.registerToErp(booking, dryRun)
+        const success = await erpService.registerToErp(booking)
         const elapsedMs = Date.now() - oneTimer
 
         results.push({
             name: booking.user_name,
+            phone: bookingPhone ?? undefined,
+            date: bookingDate ?? undefined,
+            startTime: bookingTime ?? undefined,
             status: success ? 'Success' : 'Failed',
-            dryRun: dryRun,
-            ms: elapsedMs
+            ms: elapsedMs,
         })
 
         Logger.info('[Main] syncNaver item', {
             name: booking.user_name,
             ok: success,
-            ms: elapsedMs
+            ms: elapsedMs,
         })
     }
 
-    Logger.endTimer(`erp:syncNaver dryRun=${dryRun}`, syncTimer, { count: results.length })
+    Logger.endTimer('erp:syncNaver', syncTimer, { count: results.length })
     return results
 })
+
+// Signature IPC handlers
+ipcMain.handle('signature:getActiveForms', () => signatureService.getActiveForms())
+ipcMain.handle('signature:getAllForms', () => signatureService.getAllForms())
+ipcMain.handle('signature:getFormById', (_, { id }) => signatureService.getFormById(id))
+ipcMain.handle('signature:createForm', (_, { title, content }) => signatureService.createForm(title, content))
+ipcMain.handle('signature:updateForm', (_, { id, title, content }) => signatureService.updateForm(id, title, content))
+ipcMain.handle('signature:toggleFormActive', (_, { id }) => signatureService.toggleFormActive(id))
+ipcMain.handle('signature:deleteForm', (_, { id }) => signatureService.deleteForm(id))
+ipcMain.handle('signature:submit', (_, data) => signatureService.submitSignature(data))
+ipcMain.handle('signature:getById', (_, { id }) => signatureService.getSignatureById(id))
+ipcMain.handle('signature:search', (_, params) => signatureService.searchSignatures(params))
+ipcMain.handle('signature:delete', (_, { id }) => signatureService.deleteSignature(id))
+ipcMain.handle('signature:getStats', () => signatureService.getStats())

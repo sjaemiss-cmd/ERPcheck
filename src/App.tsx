@@ -4,9 +4,10 @@ import { EducationManager } from './components/education/EducationManager'
 import { Dashboard } from './components/dashboard/Dashboard'
 import { ReservationCollector } from './components/reservation/ReservationCollector'
 import Settings from './components/Settings'
+import { SignatureManager } from './components/signature/SignatureManager'
 
 function App() {
-    const [currentTab, setCurrentTab] = useState<'dashboard' | 'education' | 'reservation' | 'settings'>('education')
+    const [currentTab, setCurrentTab] = useState<'dashboard' | 'education' | 'reservation' | 'signature' | 'settings'>('education')
 
     return (
         <div className="flex h-screen bg-gray-100">
@@ -20,6 +21,9 @@ function App() {
                 </div>
                 <div className={currentTab === 'reservation' ? 'h-full w-full' : 'hidden'}>
                     <ReservationCollector />
+                </div>
+                <div className={currentTab === 'signature' ? 'h-full w-full overflow-auto' : 'hidden'}>
+                    <SignatureManager />
                 </div>
                 <div className={currentTab === 'settings' ? 'h-full w-full overflow-auto' : 'hidden'}>
                     <Settings />
