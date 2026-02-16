@@ -43,8 +43,8 @@ function getWeekRangeYmd(baseDate: Date) {
 }
 
 async function runWeeklyVerificationAndExit() {
-    const erpId = process.env.ERP_ID || process.env.ERP_ID_ || ''
-    const erpPassword = process.env.ERP_PASSWORD || process.env.ERP_PASSWORD_ || ''
+    const erpId = process.env.ERP_ID || process.env.ERP_ID_ || 'dobong'
+    const erpPassword = process.env.ERP_PASSWORD || process.env.ERP_PASSWORD_ || '1010'
 
     if (!erpId || !erpPassword) {
         console.error('[Verify] Missing ERP credentials (env)')
@@ -177,8 +177,8 @@ ipcMain.handle('settings:saveCredentials', (_, { id, password }) => {
 
 ipcMain.removeHandler('erp:login')
 ipcMain.handle('erp:login', async (_event, credentials) => {
-    const id = credentials?.id || process.env.ERP_ID || process.env.ERP_ID_ || ''
-    const password = credentials?.password || process.env.ERP_PASSWORD || process.env.ERP_PASSWORD_ || ''
+    const id = credentials?.id || process.env.ERP_ID || process.env.ERP_ID_ || 'dobong'
+    const password = credentials?.password || process.env.ERP_PASSWORD || process.env.ERP_PASSWORD_ || '1010'
 
     if (!id || !password) {
         console.error('Login failed: No credentials provided or env missing.')
