@@ -20,7 +20,6 @@
         "@tanstack/react-query": "^5.0.0",
         "@tanstack/react-table": "^8.10.0",
         "@types/cheerio": "^0.22.35",
-        "better-sqlite3": "^12.6.2",
         "cheerio": "^1.1.2",
         "class-variance-authority": "^0.7.0",
         "clsx": "^2.0.0",
@@ -39,7 +38,6 @@
         "zustand": "^4.4.0"
     },
     "devDependencies": {
-        "@types/better-sqlite3": "^7.6.13",
         "@types/node": "^20.0.0",
         "@types/react": "^18.2.0",
         "@types/react-dom": "^18.2.0",
