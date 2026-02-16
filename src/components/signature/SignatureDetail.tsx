@@ -27,7 +27,7 @@ export function SignatureDetail() {
 
     const handleDelete = async () => {
         if (!detail) return
-        if (!confirm(`${detail.customer_name}님의 서명을 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.`)) return
+        if (!confirm(`${detail.customerName}님의 서명을 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.`)) return
 
         await window.api.signature.delete(detail.id)
         setSelectedSignatureId(null)
@@ -95,16 +95,16 @@ export function SignatureDetail() {
             <div className="bg-white rounded-lg border border-gray-200 divide-y divide-gray-200">
                 {/* Form Info */}
                 <div className="p-5">
-                    <h2 className="text-lg font-semibold text-gray-900 mb-3">{detail.form_title}</h2>
+                    <h2 className="text-lg font-semibold text-gray-900 mb-3">{detail.formTitle}</h2>
                     <div className="grid grid-cols-2 gap-4 text-sm">
                         <div>
                             <span className="text-gray-500">약관 버전</span>
-                            <p className="font-medium text-gray-900">v{detail.version_number}</p>
+                            <p className="font-medium text-gray-900">v{detail.versionNumber}</p>
                         </div>
                         <div>
                             <span className="text-gray-500">서명일시</span>
                             <p className="font-medium text-gray-900">
-                                {new Date(detail.signed_at + 'Z').toLocaleString('ko-KR')}
+                                {new Date(detail.signedAt).toLocaleString('ko-KR')}
                             </p>
                         </div>
                     </div>
@@ -116,11 +116,11 @@ export function SignatureDetail() {
                     <div className="grid grid-cols-2 gap-4 text-sm">
                         <div>
                             <span className="text-gray-500">이름</span>
-                            <p className="font-medium text-gray-900">{detail.customer_name}</p>
+                            <p className="font-medium text-gray-900">{detail.customerName}</p>
                         </div>
                         <div>
                             <span className="text-gray-500">연락처</span>
-                            <p className="font-medium text-gray-900">{detail.customer_phone}</p>
+                            <p className="font-medium text-gray-900">{detail.customerPhone}</p>
                         </div>
                     </div>
                 </div>
@@ -130,7 +130,7 @@ export function SignatureDetail() {
                     <h3 className="text-sm font-medium text-gray-500 mb-3">동의 약관 내용 (서명 당시)</h3>
                     <div className="bg-gray-50 rounded-lg p-4 max-h-48 overflow-y-auto border border-gray-200">
                         <pre className="whitespace-pre-wrap text-sm text-gray-700 font-sans leading-relaxed">
-                            {detail.agreed_content}
+                            {detail.agreedContent}
                         </pre>
                     </div>
                 </div>
@@ -140,7 +140,7 @@ export function SignatureDetail() {
                     <h3 className="text-sm font-medium text-gray-500 mb-3">서명</h3>
                     <div className="border border-gray-200 rounded-lg p-2 bg-white inline-block">
                         <img
-                            src={detail.signature_image}
+                            src={detail.signatureImage}
                             alt="서명 이미지"
                             className="max-w-full h-auto"
                             style={{ maxHeight: '200px' }}

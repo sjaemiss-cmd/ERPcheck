@@ -5,42 +5,42 @@ export type SignatureView = 'dashboard' | 'forms' | 'formEdit' | 'sign' | 'signa
 export interface ConsentForm {
     id: string
     title: string
-    is_active: number
-    created_at: string
-    updated_at: string
-    version_count?: number
-    signature_count?: number
+    isActive: number
+    createdAt: string
+    updatedAt: string
+    versionCount?: number
+    signatureCount?: number
 }
 
 export interface FormVersion {
     id: string
-    form_id: string
-    version_number: number
+    formId: string
+    versionNumber: number
     content: string
-    created_at: string
+    createdAt: string
 }
 
 export interface ConsentFormWithVersions extends ConsentForm {
     versions: FormVersion[]
-    signature_count: number
+    signatureCount: number
 }
 
 export interface Signature {
     id: string
-    form_id: string
-    form_version_id: string
-    customer_name: string
-    customer_phone: string
-    signature_image: string
-    agreed_content: string
-    signed_at: string
-    ip_address: string | null
-    form_title?: string
+    formId: string
+    formVersionId: string
+    customerName: string
+    customerPhone: string
+    signatureImage: string
+    agreedContent: string
+    signedAt: string
+    ipAddress: string | null
+    formTitle?: string
 }
 
 export interface SignatureDetail extends Signature {
-    form_title: string
-    version_number: number
+    formTitle: string
+    versionNumber: number
 }
 
 export interface SignatureStats {

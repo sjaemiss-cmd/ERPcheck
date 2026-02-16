@@ -1,6 +1,4 @@
-import Database from 'better-sqlite3'
-import { app } from 'electron'
-import path from 'path'
+import { createClient, type Client, type InValue } from '@libsql/client'
 import crypto from 'crypto'
 
 // ---------- Types ----------
@@ -8,40 +6,40 @@ import crypto from 'crypto'
 export interface ConsentForm {
     id: string
     title: string
-    is_active: number
-    created_at: string
-    updated_at: string
+    isActive: number
+    createdAt: string
+    updatedAt: string
 }
 
 export interface FormVersion {
     id: string
-    form_id: string
-    version_number: number
+    formId: string
+    versionNumber: number
     content: string
-    created_at: string
+    createdAt: string
 }
 
 export interface ConsentFormWithVersions extends ConsentForm {
     versions: FormVersion[]
-    signature_count: number
+    signatureCount: number
 }
 
 export interface Signature {
     id: string
-    form_id: string
-    form_version_id: string
-    customer_name: string
-    customer_phone: string
-    signature_image: string
-    agreed_content: string
-    signed_at: string
-    ip_address: string | null
-    form_title?: string
+    formId: string
+    formVersionId: string
+    customerName: string
+    customerPhone: string
+    signatureImage: string
+    agreedContent: string
+    signedAt: string
+    ipAddress: string | null
+    formTitle?: string
 }
 
 export interface SignatureDetail extends Signature {
-    form_title: string
-    version_number: number
+    formTitle: string
+    versionNumber: number
 }
 
 export interface SubmitSignatureData {
@@ -70,268 +68,250 @@ export interface SignatureStats {
 // ---------- Service ----------
 
 export class SignatureService {
-    private db: Database.Database
+    private db: Client
 
     constructor() {
-        const dbPath = path.join(app.getPath('userData'), 'signature.db')
-        this.db = new Database(dbPath)
-        this.db.pragma('journal_mode = WAL')
-        this.db.pragma('foreign_keys = ON')
-        this.initTables()
-    }
-
-    private initTables() {
-        this.db.exec(`
-            CREATE TABLE IF NOT EXISTS consent_forms (
-                id TEXT PRIMARY KEY,
-                title TEXT NOT NULL,
-                is_active INTEGER DEFAULT 1,
-                created_at TEXT DEFAULT (datetime('now')),
-                updated_at TEXT DEFAULT (datetime('now'))
-            );
-
-            CREATE TABLE IF NOT EXISTS form_versions (
-                id TEXT PRIMARY KEY,
-                form_id TEXT NOT NULL REFERENCES consent_forms(id) ON DELETE CASCADE,
-                version_number INTEGER NOT NULL,
-                content TEXT NOT NULL,
-                created_at TEXT DEFAULT (datetime('now')),
-                UNIQUE(form_id, version_number)
-            );
-
-            CREATE TABLE IF NOT EXISTS signatures (
-                id TEXT PRIMARY KEY,
-                form_id TEXT NOT NULL REFERENCES consent_forms(id) ON DELETE RESTRICT,
-                form_version_id TEXT NOT NULL REFERENCES form_versions(id) ON DELETE RESTRICT,
-                customer_name TEXT NOT NULL,
-                customer_phone TEXT NOT NULL,
-                signature_image TEXT NOT NULL,
-                agreed_content TEXT NOT NULL,
-                signed_at TEXT DEFAULT (datetime('now')),
-                ip_address TEXT
-            );
-
-            CREATE INDEX IF NOT EXISTS idx_signatures_form_id ON signatures(form_id);
-            CREATE INDEX IF NOT EXISTS idx_signatures_signed_at ON signatures(signed_at);
-            CREATE INDEX IF NOT EXISTS idx_signatures_customer_name ON signatures(customer_name);
-        `)
+        this.db = createClient({
+            url: process.env.TURSO_DATABASE_URL || 'libsql://signature-db-gosudobong.aws-ap-northeast-1.turso.io',
+            authToken: process.env.TURSO_AUTH_TOKEN || 'eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3NzAxODU2NzcsImlkIjoiZThkNmY0MmItZDVjMC00ZGMzLTkxMWUtZjA5MzlkZmMyYjRjIiwicmlkIjoiYjI0YWU3N2QtYWU1NC00ODE0LTk5YjUtYjliMTkzNDNjMmUxIn0.1MwWCsmRAM8THeJWbfpFDxIr1DWWVcTAuevGFVJx88UJrg2dzj_b3BDFq__JE4XbnWQkBOs4PxweJVwWDloEAw',
+        })
     }
 
     private generateId(): string {
         return crypto.randomBytes(12).toString('hex')
     }
 
+    private row<T>(r: Record<string, unknown>): T {
+        return r as unknown as T
+    }
+
     // ========== Forms ==========
 
-    getActiveForms(): ConsentForm[] {
-        return this.db.prepare(
-            'SELECT * FROM consent_forms WHERE is_active = 1 ORDER BY updated_at DESC'
-        ).all() as ConsentForm[]
+    async getActiveForms(): Promise<ConsentForm[]> {
+        const res = await this.db.execute(
+            'SELECT * FROM consent_forms WHERE isActive = 1 ORDER BY updatedAt DESC'
+        )
+        return res.rows.map(r => this.row<ConsentForm>(r as Record<string, unknown>))
     }
 
-    getAllForms(): (ConsentForm & { version_count: number; signature_count: number })[] {
-        return this.db.prepare(`
+    async getAllForms(): Promise<(ConsentForm & { versionCount: number; signatureCount: number })[]> {
+        const res = await this.db.execute(`
             SELECT cf.*,
-                   (SELECT COUNT(*) FROM form_versions WHERE form_id = cf.id) AS version_count,
-                   (SELECT COUNT(*) FROM signatures WHERE form_id = cf.id) AS signature_count
+                   (SELECT COUNT(*) FROM form_versions WHERE formId = cf.id) AS versionCount,
+                   (SELECT COUNT(*) FROM signatures WHERE formId = cf.id) AS signatureCount
             FROM consent_forms cf
-            ORDER BY cf.updated_at DESC
-        `).all() as (ConsentForm & { version_count: number; signature_count: number })[]
+            ORDER BY cf.updatedAt DESC
+        `)
+        return res.rows.map(r => this.row<ConsentForm & { versionCount: number; signatureCount: number }>(r as Record<string, unknown>))
     }
 
-    getFormById(id: string): ConsentFormWithVersions | null {
-        const form = this.db.prepare('SELECT * FROM consent_forms WHERE id = ?').get(id) as ConsentForm | undefined
-        if (!form) return null
+    async getFormById(id: string): Promise<ConsentFormWithVersions | null> {
+        const formRes = await this.db.execute({ sql: 'SELECT * FROM consent_forms WHERE id = ?', args: [id] })
+        if (formRes.rows.length === 0) return null
+        const form = this.row<ConsentForm>(formRes.rows[0] as Record<string, unknown>)
 
-        const versions = this.db.prepare(
-            'SELECT * FROM form_versions WHERE form_id = ? ORDER BY version_number DESC'
-        ).all(id) as FormVersion[]
+        const versionsRes = await this.db.execute({
+            sql: 'SELECT * FROM form_versions WHERE formId = ? ORDER BY versionNumber DESC',
+            args: [id],
+        })
+        const versions = versionsRes.rows.map(r => this.row<FormVersion>(r as Record<string, unknown>))
 
-        const signatureCount = this.db.prepare(
-            'SELECT COUNT(*) AS cnt FROM signatures WHERE form_id = ?'
-        ).get(id) as { cnt: number }
+        const countRes = await this.db.execute({
+            sql: 'SELECT COUNT(*) AS cnt FROM signatures WHERE formId = ?',
+            args: [id],
+        })
+        const signatureCount = Number(countRes.rows[0].cnt)
 
-        return { ...form, versions, signature_count: signatureCount.cnt }
+        return { ...form, versions, signatureCount }
     }
 
-    createForm(title: string, content: string): ConsentForm {
+    async createForm(title: string, content: string): Promise<ConsentForm> {
         const formId = this.generateId()
         const versionId = this.generateId()
+        const now = new Date().toISOString()
 
-        const insertForm = this.db.prepare(
-            'INSERT INTO consent_forms (id, title) VALUES (?, ?)'
-        )
-        const insertVersion = this.db.prepare(
-            'INSERT INTO form_versions (id, form_id, version_number, content) VALUES (?, ?, 1, ?)'
-        )
+        await this.db.batch([
+            { sql: 'INSERT INTO consent_forms (id, title, isActive, createdAt, updatedAt) VALUES (?, ?, 1, ?, ?)', args: [formId, title, now, now] },
+            { sql: 'INSERT INTO form_versions (id, formId, versionNumber, content, createdAt) VALUES (?, ?, 1, ?, ?)', args: [versionId, formId, content, now] },
+        ], 'write')
 
-        this.db.transaction(() => {
-            insertForm.run(formId, title)
-            insertVersion.run(versionId, formId, content)
-        })()
-
-        return this.db.prepare('SELECT * FROM consent_forms WHERE id = ?').get(formId) as ConsentForm
+        const res = await this.db.execute({ sql: 'SELECT * FROM consent_forms WHERE id = ?', args: [formId] })
+        return this.row<ConsentForm>(res.rows[0] as Record<string, unknown>)
     }
 
-    updateForm(id: string, title: string, content: string): void {
-        const form = this.db.prepare('SELECT * FROM consent_forms WHERE id = ?').get(id) as ConsentForm | undefined
-        if (!form) throw new Error('양식을 찾을 수 없습니다.')
+    async updateForm(id: string, title: string, content: string): Promise<void> {
+        const formRes = await this.db.execute({ sql: 'SELECT * FROM consent_forms WHERE id = ?', args: [id] })
+        if (formRes.rows.length === 0) throw new Error('양식을 찾을 수 없습니다.')
 
-        const latestVersion = this.db.prepare(
-            'SELECT * FROM form_versions WHERE form_id = ? ORDER BY version_number DESC LIMIT 1'
-        ).get(id) as FormVersion | undefined
-
+        const versionRes = await this.db.execute({
+            sql: 'SELECT * FROM form_versions WHERE formId = ? ORDER BY versionNumber DESC LIMIT 1',
+            args: [id],
+        })
+        const latestVersion = versionRes.rows.length > 0 ? this.row<FormVersion>(versionRes.rows[0] as Record<string, unknown>) : null
         const contentChanged = latestVersion?.content !== content
+        const now = new Date().toISOString()
 
-        this.db.transaction(() => {
-            this.db.prepare(
-                "UPDATE consent_forms SET title = ?, updated_at = datetime('now') WHERE id = ?"
-            ).run(title, id)
+        const stmts: { sql: string; args: InValue[] }[] = [
+            { sql: 'UPDATE consent_forms SET title = ?, updatedAt = ? WHERE id = ?', args: [title, now, id] },
+        ]
 
-            if (contentChanged) {
-                const nextVersion = (latestVersion?.version_number || 0) + 1
-                const versionId = this.generateId()
-                this.db.prepare(
-                    'INSERT INTO form_versions (id, form_id, version_number, content) VALUES (?, ?, ?, ?)'
-                ).run(versionId, id, nextVersion, content)
-            }
-        })()
-    }
-
-    toggleFormActive(id: string): void {
-        this.db.prepare(
-            "UPDATE consent_forms SET is_active = CASE WHEN is_active = 1 THEN 0 ELSE 1 END, updated_at = datetime('now') WHERE id = ?"
-        ).run(id)
-    }
-
-    deleteForm(id: string): { error?: string } {
-        const sigCount = this.db.prepare(
-            'SELECT COUNT(*) AS cnt FROM signatures WHERE form_id = ?'
-        ).get(id) as { cnt: number }
-
-        if (sigCount.cnt > 0) {
-            return { error: `이 양식에 ${sigCount.cnt}건의 서명이 있어 삭제할 수 없습니다. 비활성화를 이용해주세요.` }
+        if (contentChanged) {
+            const nextVersion = (latestVersion?.versionNumber || 0) + 1
+            const versionId = this.generateId()
+            stmts.push({
+                sql: 'INSERT INTO form_versions (id, formId, versionNumber, content, createdAt) VALUES (?, ?, ?, ?, ?)',
+                args: [versionId, id, nextVersion, content, now],
+            })
         }
 
-        this.db.transaction(() => {
-            this.db.prepare('DELETE FROM form_versions WHERE form_id = ?').run(id)
-            this.db.prepare('DELETE FROM consent_forms WHERE id = ?').run(id)
-        })()
+        await this.db.batch(stmts, 'write')
+    }
+
+    async toggleFormActive(id: string): Promise<void> {
+        const now = new Date().toISOString()
+        await this.db.execute({
+            sql: 'UPDATE consent_forms SET isActive = CASE WHEN isActive = 1 THEN 0 ELSE 1 END, updatedAt = ? WHERE id = ?',
+            args: [now, id],
+        })
+    }
+
+    async deleteForm(id: string): Promise<{ error?: string }> {
+        const countRes = await this.db.execute({
+            sql: 'SELECT COUNT(*) AS cnt FROM signatures WHERE formId = ?',
+            args: [id],
+        })
+        const cnt = Number(countRes.rows[0].cnt)
+
+        if (cnt > 0) {
+            return { error: `이 양식에 ${cnt}건의 서명이 있어 삭제할 수 없습니다. 비활성화를 이용해주세요.` }
+        }
+
+        await this.db.batch([
+            { sql: 'DELETE FROM form_versions WHERE formId = ?', args: [id] },
+            { sql: 'DELETE FROM consent_forms WHERE id = ?', args: [id] },
+        ], 'write')
 
         return {}
     }
 
     // ========== Signatures ==========
 
-    submitSignature(data: SubmitSignatureData): { success: boolean; error?: string } {
+    async submitSignature(data: SubmitSignatureData): Promise<{ success: boolean; error?: string }> {
         const { formId, customerName, customerPhone, signatureData } = data
 
         if (!customerName.trim()) return { success: false, error: '이름을 입력해주세요.' }
         if (!customerPhone.trim()) return { success: false, error: '연락처를 입력해주세요.' }
         if (!signatureData) return { success: false, error: '서명을 해주세요.' }
 
-        const form = this.db.prepare(
-            'SELECT * FROM consent_forms WHERE id = ? AND is_active = 1'
-        ).get(formId) as ConsentForm | undefined
+        const formRes = await this.db.execute({
+            sql: 'SELECT * FROM consent_forms WHERE id = ? AND isActive = 1',
+            args: [formId],
+        })
+        if (formRes.rows.length === 0) return { success: false, error: '유효하지 않은 동의서입니다.' }
 
-        if (!form) return { success: false, error: '유효하지 않은 동의서입니다.' }
+        const versionRes = await this.db.execute({
+            sql: 'SELECT * FROM form_versions WHERE formId = ? ORDER BY versionNumber DESC LIMIT 1',
+            args: [formId],
+        })
+        if (versionRes.rows.length === 0) return { success: false, error: '동의서 내용을 찾을 수 없습니다.' }
 
-        const latestVersion = this.db.prepare(
-            'SELECT * FROM form_versions WHERE form_id = ? ORDER BY version_number DESC LIMIT 1'
-        ).get(formId) as FormVersion | undefined
-
-        if (!latestVersion) return { success: false, error: '동의서 내용을 찾을 수 없습니다.' }
-
+        const latestVersion = this.row<FormVersion>(versionRes.rows[0] as Record<string, unknown>)
         const sigId = this.generateId()
+        const now = new Date().toISOString()
 
-        this.db.prepare(`
-            INSERT INTO signatures (id, form_id, form_version_id, customer_name, customer_phone, signature_image, agreed_content)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        `).run(sigId, formId, latestVersion.id, customerName.trim(), customerPhone.trim(), signatureData, latestVersion.content)
+        await this.db.execute({
+            sql: `INSERT INTO signatures (id, formId, formVersionId, customerName, customerPhone, signatureImage, agreedContent, signedAt)
+                  VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+            args: [sigId, formId, latestVersion.id, customerName.trim(), customerPhone.trim(), signatureData, latestVersion.content, now],
+        })
 
         return { success: true }
     }
 
-    getSignatureById(id: string): SignatureDetail | null {
-        return this.db.prepare(`
-            SELECT s.*, cf.title AS form_title, fv.version_number
-            FROM signatures s
-            JOIN consent_forms cf ON cf.id = s.form_id
-            JOIN form_versions fv ON fv.id = s.form_version_id
-            WHERE s.id = ?
-        `).get(id) as SignatureDetail | null
+    async getSignatureById(id: string): Promise<SignatureDetail | null> {
+        const res = await this.db.execute({
+            sql: `SELECT s.*, cf.title AS formTitle, fv.versionNumber
+                  FROM signatures s
+                  JOIN consent_forms cf ON cf.id = s.formId
+                  JOIN form_versions fv ON fv.id = s.formVersionId
+                  WHERE s.id = ?`,
+            args: [id],
+        })
+        if (res.rows.length === 0) return null
+        return this.row<SignatureDetail>(res.rows[0] as Record<string, unknown>)
     }
 
-    searchSignatures(params: SearchParams): { signatures: Signature[]; total: number; totalPages: number } {
+    async searchSignatures(params: SearchParams): Promise<{ signatures: Signature[]; total: number; totalPages: number }> {
         const { query, formId, startDate, endDate, page = 1, limit = 20 } = params
 
         const conditions: string[] = []
-        const bindings: unknown[] = []
+        const bindings: InValue[] = []
 
         if (query) {
-            conditions.push('(s.customer_name LIKE ? OR s.customer_phone LIKE ?)')
+            conditions.push('(s.customerName LIKE ? OR s.customerPhone LIKE ?)')
             bindings.push(`%${query}%`, `%${query}%`)
         }
-
         if (formId) {
-            conditions.push('s.form_id = ?')
+            conditions.push('s.formId = ?')
             bindings.push(formId)
         }
-
         if (startDate) {
-            conditions.push('s.signed_at >= ?')
+            conditions.push('s.signedAt >= ?')
             bindings.push(startDate)
         }
-
         if (endDate) {
-            conditions.push('s.signed_at <= ?')
-            bindings.push(endDate + ' 23:59:59')
+            conditions.push('s.signedAt <= ?')
+            bindings.push(endDate + 'T23:59:59')
         }
 
         const where = conditions.length > 0 ? 'WHERE ' + conditions.join(' AND ') : ''
         const offset = (page - 1) * limit
 
-        const total = (this.db.prepare(
-            `SELECT COUNT(*) AS cnt FROM signatures s ${where}`
-        ).get(...bindings) as { cnt: number }).cnt
+        const countRes = await this.db.execute({
+            sql: `SELECT COUNT(*) AS cnt FROM signatures s ${where}`,
+            args: bindings,
+        })
+        const total = Number(countRes.rows[0].cnt)
 
-        const signatures = this.db.prepare(`
-            SELECT s.*, cf.title AS form_title
-            FROM signatures s
-            JOIN consent_forms cf ON cf.id = s.form_id
-            ${where}
-            ORDER BY s.signed_at DESC
-            LIMIT ? OFFSET ?
-        `).all(...bindings, limit, offset) as Signature[]
+        const res = await this.db.execute({
+            sql: `SELECT s.*, cf.title AS formTitle
+                  FROM signatures s
+                  JOIN consent_forms cf ON cf.id = s.formId
+                  ${where}
+                  ORDER BY s.signedAt DESC
+                  LIMIT ? OFFSET ?`,
+            args: [...bindings, limit, offset],
+        })
+        const signatures = res.rows.map(r => this.row<Signature>(r as Record<string, unknown>))
 
-        return {
-            signatures,
-            total,
-            totalPages: Math.ceil(total / limit),
-        }
+        return { signatures, total, totalPages: Math.ceil(total / limit) }
     }
 
-    deleteSignature(id: string): void {
-        this.db.prepare('DELETE FROM signatures WHERE id = ?').run(id)
+    async deleteSignature(id: string): Promise<void> {
+        await this.db.execute({ sql: 'DELETE FROM signatures WHERE id = ?', args: [id] })
     }
 
     // ========== Stats ==========
 
-    getStats(): SignatureStats {
-        const totalForms = (this.db.prepare('SELECT COUNT(*) AS cnt FROM consent_forms').get() as { cnt: number }).cnt
-        const totalSignatures = (this.db.prepare('SELECT COUNT(*) AS cnt FROM signatures').get() as { cnt: number }).cnt
-        const todaySignatures = (this.db.prepare(
-            "SELECT COUNT(*) AS cnt FROM signatures WHERE date(signed_at) = date('now')"
-        ).get() as { cnt: number }).cnt
+    async getStats(): Promise<SignatureStats> {
+        const today = new Date().toISOString().split('T')[0]
 
-        const recentSignatures = this.db.prepare(`
-            SELECT s.*, cf.title AS form_title
-            FROM signatures s
-            JOIN consent_forms cf ON cf.id = s.form_id
-            ORDER BY s.signed_at DESC
-            LIMIT 5
-        `).all() as Signature[]
+        const [formsRes, sigsRes, todayRes, recentRes] = await this.db.batch([
+            'SELECT COUNT(*) AS cnt FROM consent_forms',
+            'SELECT COUNT(*) AS cnt FROM signatures',
+            { sql: "SELECT COUNT(*) AS cnt FROM signatures WHERE date(signedAt) = ?", args: [today] },
+            `SELECT s.*, cf.title AS formTitle
+             FROM signatures s
+             JOIN consent_forms cf ON cf.id = s.formId
+             ORDER BY s.signedAt DESC
+             LIMIT 5`,
+        ])
 
-        return { totalForms, totalSignatures, todaySignatures, recentSignatures }
+        return {
+            totalForms: Number(formsRes.rows[0].cnt),
+            totalSignatures: Number(sigsRes.rows[0].cnt),
+            todaySignatures: Number(todayRes.rows[0].cnt),
+            recentSignatures: recentRes.rows.map(r => this.row<Signature>(r as Record<string, unknown>)),
+        }
     }
 }

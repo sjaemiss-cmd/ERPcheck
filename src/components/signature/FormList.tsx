@@ -25,9 +25,9 @@ export function FormList() {
         loadForms()
     }
 
-    const handleDelete = async (form: ConsentForm & { signature_count?: number }) => {
-        if (form.signature_count && form.signature_count > 0) {
-            alert(`이 양식에 ${form.signature_count}건의 서명이 있어 삭제할 수 없습니다. 비활성화를 이용해주세요.`)
+    const handleDelete = async (form: ConsentForm & { signatureCount?: number }) => {
+        if (form.signatureCount && form.signatureCount > 0) {
+            alert(`이 양식에 ${form.signatureCount}건의 서명이 있어 삭제할 수 없습니다. 비활성화를 이용해주세요.`)
             return
         }
         if (!confirm(`"${form.title}" 양식을 삭제하시겠습니까?`)) return
@@ -90,23 +90,23 @@ export function FormList() {
                             <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-2">
                                     <h3 className="font-medium text-gray-900 truncate">{form.title}</h3>
-                                    <span className={`px-2 py-0.5 text-xs rounded-full ${form.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
-                                        {form.is_active ? '활성' : '비활성'}
+                                    <span className={`px-2 py-0.5 text-xs rounded-full ${form.isActive ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                                        {form.isActive ? '활성' : '비활성'}
                                     </span>
                                 </div>
                                 <div className="mt-1 text-sm text-gray-500 flex gap-4">
-                                    <span>버전 {form.version_count || 0}</span>
-                                    <span>서명 {form.signature_count || 0}건</span>
-                                    <span>수정일 {new Date(form.updated_at + 'Z').toLocaleDateString('ko-KR')}</span>
+                                    <span>버전 {form.versionCount || 0}</span>
+                                    <span>서명 {form.signatureCount || 0}건</span>
+                                    <span>수정일 {new Date(form.updatedAt).toLocaleDateString('ko-KR')}</span>
                                 </div>
                             </div>
                             <div className="flex items-center gap-1 ml-4">
                                 <button
                                     onClick={() => handleToggle(form.id)}
                                     className="p-2 hover:bg-gray-100 rounded-lg"
-                                    title={form.is_active ? '비활성화' : '활성화'}
+                                    title={form.isActive ? '비활성화' : '활성화'}
                                 >
-                                    {form.is_active ? <ToggleRight size={20} className="text-green-600" /> : <ToggleLeft size={20} className="text-gray-400" />}
+                                    {form.isActive ? <ToggleRight size={20} className="text-green-600" /> : <ToggleLeft size={20} className="text-gray-400" />}
                                 </button>
                                 <button
                                     onClick={() => handleEdit(form.id)}

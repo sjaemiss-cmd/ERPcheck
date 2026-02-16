@@ -59,7 +59,7 @@ interface Window {
         }
         signature: {
             getActiveForms: () => Promise<SignatureConsentForm[]>
-            getAllForms: () => Promise<(SignatureConsentForm & { version_count: number; signature_count: number })[]>
+            getAllForms: () => Promise<(SignatureConsentForm & { versionCount: number; signatureCount: number })[]>
             getFormById: (id: string) => Promise<SignatureConsentFormWithVersions | null>
             createForm: (title: string, content: string) => Promise<SignatureConsentForm>
             updateForm: (id: string, title: string, content: string) => Promise<void>
@@ -77,38 +77,38 @@ interface Window {
 interface SignatureConsentForm {
     id: string
     title: string
-    is_active: number
-    created_at: string
-    updated_at: string
+    isActive: number
+    createdAt: string
+    updatedAt: string
 }
 
 interface SignatureFormVersion {
     id: string
-    form_id: string
-    version_number: number
+    formId: string
+    versionNumber: number
     content: string
-    created_at: string
+    createdAt: string
 }
 
 interface SignatureConsentFormWithVersions extends SignatureConsentForm {
     versions: SignatureFormVersion[]
-    signature_count: number
+    signatureCount: number
 }
 
 interface SignatureRecord {
     id: string
-    form_id: string
-    form_version_id: string
-    customer_name: string
-    customer_phone: string
-    signature_image: string
-    agreed_content: string
-    signed_at: string
-    ip_address: string | null
-    form_title?: string
+    formId: string
+    formVersionId: string
+    customerName: string
+    customerPhone: string
+    signatureImage: string
+    agreedContent: string
+    signedAt: string
+    ipAddress: string | null
+    formTitle?: string
 }
 
 interface SignatureDetailRecord extends SignatureRecord {
-    form_title: string
-    version_number: number
+    formTitle: string
+    versionNumber: number
 }

@@ -145,11 +145,11 @@ export function SignatureList() {
                                     className="border-b border-gray-50 hover:bg-gray-50 cursor-pointer"
                                     onClick={() => viewDetail(sig.id)}
                                 >
-                                    <td className="px-5 py-3 text-sm font-medium text-gray-900">{sig.customer_name}</td>
-                                    <td className="px-5 py-3 text-sm text-gray-600">{sig.customer_phone}</td>
-                                    <td className="px-5 py-3 text-sm text-gray-600">{sig.form_title}</td>
+                                    <td className="px-5 py-3 text-sm font-medium text-gray-900">{sig.customerName}</td>
+                                    <td className="px-5 py-3 text-sm text-gray-600">{sig.customerPhone}</td>
+                                    <td className="px-5 py-3 text-sm text-gray-600">{sig.formTitle}</td>
                                     <td className="px-5 py-3 text-sm text-gray-500">
-                                        {new Date(sig.signed_at + 'Z').toLocaleString('ko-KR')}
+                                        {new Date(sig.signedAt).toLocaleString('ko-KR')}
                                     </td>
                                 </tr>
                             ))}
